@@ -1,5 +1,29 @@
+# Environment files and credentials (never commit secrets!)
 .env
+.env.local
+.env.*.local
 *.env
-!.env.example
-aws-secrets-manager/aws-secrets
-aws-secrets-manager/aws-secret-file
+!*.env.example
+05-apps/.env
+
+# Certificate files (not to be committed to git)
+03-Traefik-Gateway-Class/cert/tls-generator/ca-store/*
+03-Traefik-Gateway-Class/cert/tls-generator/server/*
+03-Traefik-Gateway-Class/cert/tls-generator/client/*
+03-Traefik-Gateway-Class/cert/tls-generator/output/*
+
+# Ignore all output files except .gitkeep (so the directory is version controlled)
+!03-Traefik-Gateway-Class/cert/tls-generator/ca-store/.gitkeep
+!03-Traefik-Gateway-Class/cert/tls-generator/server/.gitkeep
+!03-Traefik-Gateway-Class/cert/tls-generator/client/.gitkeep
+!03-Traefik-Gateway-Class/cert/tls-generator/output/.gitkeep
+
+# Ignore all script files except .gitkeep (so the directory is version controlled)
+!03-Traefik-Gateway-Class/cert/tls-generator/server/*.sh
+!03-Traefik-Gateway-Class/cert/tls-generator/server/*.ps1
+
+# Temporary / OS files
+.DS_Store
+Thumbs.db
+*.swp
+*~

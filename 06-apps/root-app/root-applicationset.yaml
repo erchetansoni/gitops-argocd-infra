@@ -1,0 +1,56 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: branch-environments
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+    - matrix:
+        generators:
+          - git:
+              repoURL: https://github.com/erchetansoni/gitops-argocd-apps.git
+              revision: HEAD
+              directories:
+                - path: environments/*
+          - list:
+              elements:
+                - app: app1
+                - app: app2
+                - app: app3
+
+  template:
+    metadata:
+      name: "{{ .path.basename }}-{{ .app }}"
+      labels:
+        app: "{{ .app }}"
+        branch: "{{ .path.basename }}"
+    spec:
+      project: default
+      source:
+        repoURL: https://github.com/erchetansoni/gitops-argocd-apps.git
+        targetRevision: HEAD
+        path: "{{ .path.path }}/{{ .app }}"
+        # kustomize: {}
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{ .path.basename }}"
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+      ignoreDifferences:
+        - group: gateway.networking.k8s.io
+          kind: HTTPRoute
+          jqPathExpressions:
+            - .spec.parentRefs[].group
+            - .spec.parentRefs[].kind
+            - .spec.rules[].backendRefs[].group
+            - .spec.rules[].backendRefs[].kind
+            - .spec.rules[].backendRefs[].weight
