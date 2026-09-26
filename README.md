@@ -214,7 +214,114 @@ curl -k https://argocd.chetan.local/
 
 ---
 
+## 🌍 Multi-Cloud & On-Premises Deployment Guide
+
+While this repository defaults to a local **KinD** cluster with Docker port-mapping, the Gateway API and GitOps structure seamlessly scale to multi-node clusters across **AWS**, **GCP**, and on-premises **Proxmox VE**.
+
+### Summary of Differences Across Targets
+
+| Feature | KinD (Local Dev) | GCP (GKE) | AWS (EKS) | Proxmox VE (Bare-metal / VMs) |
+| :--- | :--- | :--- | :--- | :--- |
+| **Cluster Topology** | 1 Docker node | 3+ GKE worker nodes | 3+ EKS worker nodes | 3+ VMs (e.g. Talos / k3s / kubeadm) |
+| **Service Type** | `ClusterIP` + `hostPort: 80/443` | `LoadBalancer` (Cloud NLB) | `LoadBalancer` (AWS NLB) | `LoadBalancer` (via MetalLB or Cilium BGP) |
+| **Traefik hostPort** | `80` & `443` enabled | Disabled | Disabled | Optional (or use MetalLB VIP) |
+| **External Access / IP** | `127.0.0.1` | GCP External Static/Ephemeral IP | AWS NLB DNS name (`*.elb.amazonaws.com`) | Dedicated LAN VIP (e.g. `192.168.1.200`) |
+| **DNS Resolution** | Workstation `/etc/hosts` | Cloud DNS (`*.yourdomain.com` -> IP) | Route 53 (`*.yourdomain.com` -> NLB) | Pi-hole / pfSense / Local DNS Server |
+| **TLS Certificates** | Self-signed Root CA (`03-Traefik...`) | `cert-manager` + Let's Encrypt | `cert-manager` or AWS ACM | `cert-manager` (Let's Encrypt via DNS-01) |
+
+---
+
+### 1. ☁️ Google Cloud Platform (GCP - GKE)
+
+1. **Traefik Service (`traefik-values.yaml`)**:
+   Set `service.spec.type: LoadBalancer` and remove `hostPort`. GCP will provision a Passthrough Network Load Balancer (TCP):
+   ```yaml
+   service:
+     enabled: true
+     spec:
+       type: LoadBalancer
+       externalTrafficPolicy: Local
+   ports:
+     web:
+       port: 80
+       containerPort: 80
+       exposedPort: 80
+       # hostPort: 80   <-- Remove
+     websecure:
+       port: 443
+       containerPort: 443
+       exposedPort: 443
+       # hostPort: 443  <-- Remove
+   ```
+
+2. **DNS & TLS**:
+   * Get the external IP via `kubectl get svc traefik -n traefik`.
+   * In **Google Cloud DNS**, create a wildcard `A` record: `*.yourdomain.com` pointing to the LoadBalancer IP.
+   * Deploy `cert-manager` with a Let's Encrypt `ClusterIssuer` using the GCP Cloud DNS solver.
+
+---
+
+### 2. 🟧 Amazon Web Services (AWS - EKS)
+
+1. **Traefik Service (`traefik-values.yaml`)**:
+   Deploy the [AWS Load Balancer Controller](https://kubernetes-sigs.github.io/aws-load-balancer-controller/) and annotate the service for an external Network Load Balancer (NLB):
+   ```yaml
+   service:
+     enabled: true
+     spec:
+       type: LoadBalancer
+       annotations:
+         service.beta.kubernetes.io/aws-load-balancer-type: "external"
+         service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: "ip"
+         service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+   ```
+
+2. **DNS & TLS**:
+   * In **Route 53**, create an `A` (Alias) record: `*.yourdomain.com` pointing to the AWS NLB DNS.
+   * Traefik can terminate TLS using a wildcard cert issued via `cert-manager` (Route 53 DNS-01 challenge) or offload TLS directly at the NLB using AWS Certificate Manager (ACM).
+
+---
+
+### 3. 🖥️ Proxmox VE (HomeLab / Private Cloud)
+
+When running a 3-node Kubernetes cluster inside Proxmox (e.g., using **Talos Linux**, **k3s**, or **Ubuntu + kubeadm** VMs):
+
+1. **Bare-metal Load Balancer (MetalLB / Cilium)**:
+   Proxmox does not natively provide a cloud load balancer. Install **[MetalLB](https://metallb.io/installation/)** in Layer 2 mode to assign IPs from your home/homelab subnet:
+   ```yaml
+   apiVersion: metallb.io/v1beta1
+   kind: IPAddressPool
+   metadata:
+     name: proxmox-ip-pool
+     namespace: metallb-system
+   spec:
+     addresses:
+       - 192.168.1.200-192.168.1.210  # Range on your Proxmox LAN
+   ---
+   apiVersion: metallb.io/v1beta1
+   kind: L2Advertisement
+   metadata:
+     name: proxmox-l2-advert
+     namespace: metallb-system
+   ```
+
+2. **Traefik Service (`traefik-values.yaml`)**:
+   ```yaml
+   service:
+     enabled: true
+     spec:
+       type: LoadBalancer
+       loadBalancerIP: 192.168.1.200  # MetalLB assigns this Virtual IP
+   ```
+
+3. **DNS & Routing in Proxmox**:
+   * In your local network router (pfSense, OPNsense, UniFi, Pi-hole, or dnsmasq), point `*.chetan.local` or `*.yourhomelab.net` to `192.168.1.200`.
+   * Any client on your local WiFi/LAN can now access `https://app1.yourhomelab.net` without modifying workstation `hosts` files!
+
+---
+
 ## 🤝 Companion Repository
 
 To configure applications, modify Helm values, or create new environment branches (`dev`, `staging`, `prod`), refer to:  
 👉 **[`erchetansoni/gitops-argocd-apps`](https://github.com/erchetansoni/gitops-argocd-apps)**
+
