@@ -34,6 +34,15 @@ All platform components are declared in [infra-apps-root.yaml](file:///c:/Projec
   * Configured with `--kubelet-insecure-tls` and `--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname` for seamless local Kind cluster operation.
   * Provides `kubectl top nodes` and `kubectl top pods` metrics.
 
+### 3. cert-manager (`03-cert-manager/`)
+* **Argo CD Application Name**: `cert-manager`
+* **Helm Chart**: `cert-manager` (`v1.21.2`) from `https://charts.jetstack.io`
+* **Namespace**: `cert-manager`
+* **Configuration Highlights**:
+  * `crds.enabled: true` for automatic CustomResourceDefinition management via Helm.
+  * Gateway API support enabled (`extraArgs: [--enable-gateway-api]`).
+  * ServerSideApply enabled in Argo CD sync options for clean CRD synchronization.
+
 ---
 
 ## File Structure
@@ -41,21 +50,26 @@ All platform components are declared in [infra-apps-root.yaml](file:///c:/Projec
 ```
 04-infra-apps/
 ├── 01-traefik-gateway/
-│   ├── traefik-application.yaml     # Individual Argo CD Application manifest
-│   └── traefik-values.yaml          # Traefik Helm values
+│   ├── traefik-application.yaml        # Individual Argo CD Application manifest
+│   └── traefik-values.yaml             # Traefik Helm values
 ├── 02-metrics-server/
-│   ├── install-metrics-server.sh    # Pre-install script (used before Argo CD)
+│   ├── install-metrics-server.sh       # Pre-install script (used before Argo CD)
 │   ├── metrics-server-application.yaml # Individual Argo CD Application manifest
-│   └── metrics-server-values.yaml   # Metrics Server Helm values
-├── infra-apps-root.yaml             # Root Application manifest containing both apps
-└── README.md                        # Documentation
+│   └── metrics-server-values.yaml      # Metrics Server Helm values
+├── 03-cert-manager/
+│   ├── cert-manager-application.yaml   # Individual Argo CD Application manifest
+│   ├── cert-manager-values.yaml        # cert-manager Helm values
+│   ├── install-cert-manager.sh         # Pre-install script (used before Argo CD)
+│   └── README.md                       # Documentation
+├── infra-apps-root.yaml                # Root Application manifest containing infra apps
+└── README.md                           # Documentation
 ```
 
 ---
 
 ## How Infra Apps Are Adopted by Argo CD
 
-Instead of manual `helm install` commands drifting over time, the script [05-argocd/02-adopt-infra-apps.sh](file:///c:/Projects/My_Projects/GitOps-demo/05-argocd/02-adopt-infra-apps.sh) adopts both running components:
+Instead of manual `helm install` commands drifting over time, the script [05-argocd/02-adopt-infra-apps.sh](file:///c:/Projects/My_Projects/GitOps-demo/05-argocd/02-adopt-infra-apps.sh) adopts all running components:
 
 1. Injects Helm release ownership annotations (`meta.helm.sh/release-name` and `app.kubernetes.io/managed-by: Helm`).
 2. Applies [infra-apps-root.yaml](file:///c:/Projects/My_Projects/GitOps-demo/04-infra-apps/infra-apps-root.yaml) using Server-Side Apply (`ServerSideApply=true`).
@@ -68,7 +82,7 @@ Instead of manual `helm install` commands drifting over time, the script [05-arg
 Check the Argo CD status of infra apps:
 
 ```bash
-kubectl get applications -n argocd traefik-gateway-controller metrics-server
+kubectl get applications -n argocd traefik-gateway-controller metrics-server cert-manager
 ```
 
 Verify that Metrics Server is working:
@@ -76,6 +90,13 @@ Verify that Metrics Server is working:
 ```bash
 kubectl top nodes
 kubectl top pods -A
+```
+
+Verify cert-manager deployments:
+
+```bash
+kubectl get deployment -n cert-manager
+kubectl get crd -l app.kubernetes.io/name=cert-manager
 ```
 
 ---
