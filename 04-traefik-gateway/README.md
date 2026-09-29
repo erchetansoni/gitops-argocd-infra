@@ -80,6 +80,40 @@ bash 04-traefik-gateway/install-traefik-gatewayclass.sh
 
 ---
 
+## 💳 Using Commercial / Paid Certificates with Traefik Gateway
+
+If deploying to a public production environment using a paid certificate from DigiCert, Sectigo, GoDaddy, etc.:
+
+1. **Bundle your certificate with intermediate CA chain**:
+   ```bash
+   cat your_domain.crt ca-bundle.crt > fullchain.crt
+   ```
+
+2. **Create the TLS Secret in namespace `default`**:
+   ```bash
+   kubectl create secret tls domain-certificate-tls-secret \
+     --cert=fullchain.crt \
+     --key=your_domain.key \
+     --namespace=default \
+     --dry-run=client -o yaml | kubectl apply -f -
+   ```
+
+3. **Update the listener hostname in [install-gatewayclass_and_gateway.yaml](install-gatewayclass_and_gateway.yaml)**:
+   ```yaml
+   listeners:
+     - name: https-prod
+       protocol: HTTPS
+       port: 443
+       hostname: "*.yourdomain.com"
+       tls:
+         mode: Terminate
+         certificateRefs:
+           - name: domain-certificate-tls-secret
+   ```
+
+4. **Public Trust**: Because commercial certificates chain up to built-in root CAs, all browsers and mobile devices will show a valid lock 🔒 with zero client configuration.
+
+---
 
 ## Verification
 

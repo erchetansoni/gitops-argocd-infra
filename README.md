@@ -234,7 +234,7 @@ While this repository defaults to a local **KinD** cluster with Docker port-mapp
 | **Traefik hostPort** | `80` & `443` enabled | Disabled | Disabled | Optional (or use MetalLB VIP) |
 | **External Access / IP** | `127.0.0.1` | GCP External Static/Ephemeral IP | AWS NLB DNS name (`*.elb.amazonaws.com`) | Dedicated LAN VIP (e.g. `192.168.1.200`) |
 | **DNS Resolution** | Workstation `/etc/hosts` | Cloud DNS (`*.yourdomain.com` -> IP) | Route 53 (`*.yourdomain.com` -> NLB) | Pi-hole / pfSense / Local DNS Server |
-| **TLS Certificates** | Self-signed Root CA (`03-Traefik...`) | `cert-manager` + Let's Encrypt | `cert-manager` or AWS ACM | `cert-manager` (Let's Encrypt via DNS-01) |
+| **TLS Certificates** | Local Root CA via `cert-manager` (`03-cert-manager`) | `cert-manager` + Let's Encrypt / Commercial | `cert-manager` or AWS ACM | `cert-manager` (Let's Encrypt / Commercial) |
 
 ---
 
@@ -327,8 +327,36 @@ When running a 3-node Kubernetes cluster inside Proxmox (e.g., using **Talos Lin
 
 ---
 
+## 💳 Managing Commercial / Paid Certificates in Production
+
+When purchasing commercial SSL/TLS certificates (DigiCert, Sectigo, GlobalSign, GoDaddy, etc.) for real production domains (`*.yourdomain.com`):
+
+### 1. Bundle Certificate Chain
+Always combine the server certificate and the intermediate CA bundle into a full-chain file:
+```bash
+cat your_domain.crt ca-bundle.crt > fullchain.crt
+```
+
+### 2. Deployment Options
+* **Direct Secret (Manual / Non-GitOps)**:
+  ```bash
+  kubectl create secret tls domain-certificate-tls-secret \
+    --cert=fullchain.crt \
+    --key=your_domain.key \
+    --namespace=default
+  ```
+* **GitOps-Safe (Bitnami Sealed Secrets / External Secrets Operator)**:
+  Never commit `your_domain.key` in plaintext. Encrypt via `kubeseal` into a `SealedSecret` or sync directly from AWS Secrets Manager / Azure Key Vault / GCP Secret Manager using the **External Secrets Operator (ESO)**.
+* **Automated Renewal via cert-manager (ACME + EAB)**:
+  Commercial CAs (Sectigo, DigiCert, ZeroSSL) support ACME with External Account Binding (EAB), allowing cert-manager to negotiate and rotate paid certificates automatically before expiration.
+
+*For complete configuration manifests, see [03-cert-manager/README.md](03-cert-manager/README.md) and [04-traefik-gateway/README.md](04-traefik-gateway/README.md).*
+
+---
+
 ## 🤝 Companion Repository
 
 To configure applications, modify Helm values, or create new environment branches (`dev`, `staging`, `prod`), refer to:  
 👉 **[`erchetansoni/gitops-argocd-apps`](https://github.com/erchetansoni/gitops-argocd-apps)**
+
 
