@@ -27,11 +27,11 @@
 # Log files
 *.log
 
-# Large Air-Gap image archives and chart packages (do not commit multi-gigabyte tarballs to git)
-**/*.tar
-**/*.tgz
-**/*.tar.gz
-**/*.tar.zst
+# Large Air-Gap image archives and chart packages (ignored in any directory at any depth)
+*.tar
+*.tgz
+*.tar.gz
+*.tar.zst
 
 # Temporary / OS files
 .DS_Store

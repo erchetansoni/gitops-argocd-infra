@@ -5,7 +5,13 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMAGES_FILE="${SCRIPT_DIR}/images.txt"
+if [[ -f "${SCRIPT_DIR}/images.yaml" ]]; then
+  IMAGES_FILE="${SCRIPT_DIR}/images.yaml"
+elif [[ -f "${SCRIPT_DIR}/images.yml" ]]; then
+  IMAGES_FILE="${SCRIPT_DIR}/images.yml"
+else
+  IMAGES_FILE="${SCRIPT_DIR}/images.txt"
+fi
 OUTPUT_TAR="${SCRIPT_DIR}/airgap-images.tar"
 CHARTS_DIR="${SCRIPT_DIR}/charts"
 
@@ -37,22 +43,47 @@ echo "🐳 Using container runtime CLI: ${CONTAINER_CLI} (Target Platform: ${TAR
 
 # 1. Pull container images
 echo ""
-echo "⬇️  Pulling all platform images from ${IMAGES_FILE}..."
+echo "⬇️  Pulling all platform images from $(basename "${IMAGES_FILE}")..."
 images_to_save=()
-while IFS= read -r line || [[ -n "$line" ]]; do
-  # Trim whitespace
-  img="$(echo "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-  # Ignore empty lines and comments
-  [[ -z "$img" || "$img" =~ ^# ]] && continue
 
-  echo "   📥 Pulling: ${img}"
-  if [[ "${CONTAINER_CLI}" == "docker" ]]; then
-    ${CONTAINER_CLI} pull --platform "${TARGET_PLATFORM}" "${img}"
-  else
-    ${CONTAINER_CLI} pull "${img}"
-  fi
-  images_to_save+=("${img}")
-done < "${IMAGES_FILE}"
+if [[ "${IMAGES_FILE}" =~ \.ya?ml$ ]]; then
+  # Structured YAML format (images.yaml)
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    cleaned="$(echo "$line" | sed -e 's/[[:space:]]*#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [[ -z "$cleaned" ]] && continue
+
+    img=""
+    if [[ "$cleaned" =~ image:[[:space:]]*[\"\']?([^\"\'[:space:]]+) ]]; then
+      img="${BASH_REMATCH[1]}"
+    elif [[ "$cleaned" =~ ^-[[:space:]]*[\"\']?([a-zA-Z0-9._/-]+:[a-zA-Z0-9._-]+) ]]; then
+      img="${BASH_REMATCH[1]}"
+    fi
+
+    if [[ -n "$img" ]]; then
+      echo "   📥 Pulling: ${img}"
+      if [[ "${CONTAINER_CLI}" == "docker" ]]; then
+        ${CONTAINER_CLI} pull --platform "${TARGET_PLATFORM}" "${img}"
+      else
+        ${CONTAINER_CLI} pull "${img}"
+      fi
+      images_to_save+=("${img}")
+    fi
+  done < "${IMAGES_FILE}"
+else
+  # Plain text format (images.txt)
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    img="$(echo "$line" | sed -e 's/[[:space:]]*#.*//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [[ -z "$img" ]] && continue
+
+    echo "   📥 Pulling: ${img}"
+    if [[ "${CONTAINER_CLI}" == "docker" ]]; then
+      ${CONTAINER_CLI} pull --platform "${TARGET_PLATFORM}" "${img}"
+    else
+      ${CONTAINER_CLI} pull "${img}"
+    fi
+    images_to_save+=("${img}")
+  done < "${IMAGES_FILE}"
+fi
 
 # 2. Save all images to tar archive
 echo ""

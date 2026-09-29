@@ -116,7 +116,7 @@ bash airgap/bundle-offline-assets.sh
 ```
 
 This automates:
-1. Pulling all 9 required platform container images (`images.txt`).
+1. Pulling all 9 required platform container images (`images.yaml`).
 2. Exporting them to `airgap/airgap-images.tar`.
 3. Packaging Helm charts (`.tgz`) for Traefik, cert-manager, and Metrics Server.
 4. Downloading the complete Argo CD `v3.5.3` install manifest.

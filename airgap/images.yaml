@@ -1,0 +1,79 @@
+# ==============================================================================
+# Air-Gap Container Images Inventory
+# ==============================================================================
+# This file defines all platform container images needed for offline operation.
+# The bundling script (airgap/bundle-offline-assets.sh) reads this file, pulls
+# each image on an internet-connected machine, and exports them into:
+#   airgap/airgap-images.tar
+#
+# ------------------------------------------------------------------------------
+# 💡 HOW TO IDENTIFY EXACT IMAGE NAMES & TAGS IN THE FUTURE:
+# ------------------------------------------------------------------------------
+# 1. From a Running Kubernetes Cluster (e.g. your local KinD test cluster):
+#    Run this one-liner to list all unique images currently running:
+#      kubectl get pods -A -o jsonpath='{range .items[*].spec.containers[*]}{.image}{"\n"}{end}{range .items[*].spec.initContainers[*]}{.image}{"\n"}{end}' | sort -u
+#
+# 2. From a Helm Chart (.tgz or repo) BEFORE installing:
+#    Render the chart templates to stdout and extract the image lines:
+#      helm template ./airgap/charts/traefik-41.6.0.tgz | grep -E 'image:\s*"?([^"[:space:]]+)'
+#      helm template ./airgap/charts/cert-manager-v1.21.2.tgz | grep -E 'image:\s*"?([^"[:space:]]+)'
+#
+# 3. From Static Manifest YAMLs (e.g. Argo CD install.yaml):
+#    Extract all container and initContainer image references:
+#      grep -E 'image:\s*"?([^"[:space:]]+)' 06-argocd/argocd-install-v3.5.3.yaml | sed -E 's/.*image:\s*"?([^"[:space:]]+)"?.*/\1/' | sort -u
+#
+# 4. Check Helm Chart 'values.yaml' directly:
+#    Inspect the 'image:' section in values.yaml:
+#      image:
+#        repository: <repo>
+#        tag: <tag> (or Chart.appVersion)
+# ==============================================================================
+
+images:
+  # ----------------------------------------------------------------------------
+  # 1. Ingress & Gateway API Controller (Step 02: 02-traefik-controller)
+  # ----------------------------------------------------------------------------
+  - component: traefik-gateway-controller
+    description: "Traefik v3.7 gateway controller (DaemonSet on host ports 80/443)"
+    image: docker.io/traefik:v3.7.13
+
+  # ----------------------------------------------------------------------------
+  # 2. Certificate Management (Step 03: 03-cert-manager)
+  # ----------------------------------------------------------------------------
+  - component: cert-manager-controller
+    description: "Core controller for issuing and managing TLS certificates"
+    image: quay.io/jetstack/cert-manager-controller:v1.21.2
+
+  - component: cert-manager-cainjector
+    description: "Injects CA bundles into admission webhooks and CRDs"
+    image: quay.io/jetstack/cert-manager-cainjector:v1.21.2
+
+  - component: cert-manager-webhook
+    description: "Validating and mutating webhook for certificate requests"
+    image: quay.io/jetstack/cert-manager-webhook:v1.21.2
+
+  - component: cert-manager-startupapicheck
+    description: "Helm post-install validation hook for cert-manager API"
+    image: quay.io/jetstack/cert-manager-startupapicheck:v1.21.2
+
+  # ----------------------------------------------------------------------------
+  # 3. Cluster Metrics & Autoscaling (Step 05: 05-infra-apps/02-metrics-server)
+  # ----------------------------------------------------------------------------
+  - component: metrics-server
+    description: "Supplies CPU/Memory resource metrics for 'kubectl top' and HPA"
+    image: registry.k8s.io/metrics-server/metrics-server:v0.9.0
+
+  # ----------------------------------------------------------------------------
+  # 4. GitOps Core - Argo CD v3.5.3 (Step 06: 06-argocd)
+  # ----------------------------------------------------------------------------
+  - component: argocd
+    description: "Argo CD core (server, application-controller, repo-server, and in-cluster chart server)"
+    image: quay.io/argoproj/argocd:v3.5.3
+
+  - component: dex
+    description: "Argo CD identity provider for SSO / OIDC authentication"
+    image: ghcr.io/dexidp/dex:v2.45.1
+
+  - component: redis
+    description: "Argo CD in-memory state and application manifest cache"
+    image: public.ecr.aws/docker/library/redis:8.2.3-alpine
