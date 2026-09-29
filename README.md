@@ -327,6 +327,18 @@ When running a 3-node Kubernetes cluster inside Proxmox (e.g., using **Talos Lin
 
 ---
 
+### 4. 🔒 Air-Gapped 3-Node K3s Cluster
+
+When moving from local KinD to a production **3-node K3s cluster with no internet access**:
+* **Complete Guide**: Refer to **[`airgap/README.md`](airgap/README.md)**.
+* **Pre-bundled Assets**:
+  * Run `bash airgap/bundle-offline-assets.sh` on a connected machine to export all 9 platform container images into `airgap/airgap-images.tar` and package Helm charts.
+  * Load images on all 3 K3s nodes with `sudo bash airgap/load-offline-assets.sh`.
+* **K3s Requirement**: Install K3s with `--disable=traefik` to prevent K3s default Traefik from conflicting with Gateway API.
+* All deployment scripts (`02-traefik-controller`, `03-cert-manager`, `05-infra-apps`, `06-argocd`) automatically detect and use the local `.tgz` charts and offline manifests without internet connectivity.
+
+---
+
 ## 💳 Managing Commercial / Paid Certificates in Production
 
 When purchasing commercial SSL/TLS certificates (DigiCert, Sectigo, GlobalSign, GoDaddy, etc.) for real production domains (`*.yourdomain.com`):

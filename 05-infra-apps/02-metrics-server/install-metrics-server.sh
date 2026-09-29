@@ -42,16 +42,32 @@ to_native_path() {
   fi
 }
 
-# Add and update Metrics Server Helm repository
-echo "📦 Adding/Updating Metrics Server Helm repository..."
-helm repo add metrics-server "${HELM_REPO_URL}" --force-update
-helm repo update metrics-server
+# Locate Metrics Server Helm chart (offline local .tgz or online Helm repo)
+OFFLINE_CHART=""
+for candidate in "${SCRIPT_DIR}"/metrics-server-*.tgz "${SCRIPT_DIR}"/../../airgap/charts/metrics-server-*.tgz; do
+  if [[ -f "$candidate" ]]; then
+    OFFLINE_CHART="$candidate"
+    break
+  fi
+done
+
+VERSION_FLAG=()
+if [[ -n "${OFFLINE_CHART}" ]]; then
+  echo "📦 Offline environment: Using local Metrics Server Helm chart: ${OFFLINE_CHART}"
+  CHART_SOURCE="$(to_native_path "${OFFLINE_CHART}")"
+else
+  echo "📦 Adding/Updating Metrics Server Helm repository..."
+  helm repo add metrics-server "${HELM_REPO_URL}" --force-update
+  helm repo update metrics-server
+  CHART_SOURCE="${HELM_CHART}"
+  VERSION_FLAG=(--version "${CHART_VERSION}")
+fi
 
 # Install or upgrade Metrics Server
 echo "🚀 Installing Metrics Server in namespace '${NAMESPACE}'..."
 VALUES_FILE_NATIVE="$(to_native_path "${VALUES_FILE}")"
-helm upgrade --install "${RELEASE_NAME}" "${HELM_CHART}" \
-  --version "${CHART_VERSION}" \
+helm upgrade --install "${RELEASE_NAME}" "${CHART_SOURCE}" \
+  ${VERSION_FLAG[@]+"${VERSION_FLAG[@]}"} \
   --namespace "${NAMESPACE}" \
   --create-namespace \
   --values "${VALUES_FILE_NATIVE}" \

@@ -49,16 +49,32 @@ to_native_path() {
   fi
 }
 
-# Add and update cert-manager Helm repository
-echo "📦 Adding/Updating cert-manager Helm repository..."
-helm repo add jetstack "${HELM_REPO_URL}" --force-update
-helm repo update jetstack
+# Locate cert-manager Helm chart (offline local .tgz or online Helm repo)
+OFFLINE_CHART=""
+for candidate in "${SCRIPT_DIR}"/cert-manager-*.tgz "${SCRIPT_DIR}"/../airgap/charts/cert-manager-*.tgz; do
+  if [[ -f "$candidate" ]]; then
+    OFFLINE_CHART="$candidate"
+    break
+  fi
+done
+
+VERSION_FLAG=()
+if [[ -n "${OFFLINE_CHART}" ]]; then
+  echo "📦 Offline environment: Using local cert-manager Helm chart: ${OFFLINE_CHART}"
+  CHART_SOURCE="$(to_native_path "${OFFLINE_CHART}")"
+else
+  echo "📦 Adding/Updating cert-manager Helm repository..."
+  helm repo add jetstack "${HELM_REPO_URL}" --force-update
+  helm repo update jetstack
+  CHART_SOURCE="${HELM_CHART}"
+  VERSION_FLAG=(--version "${CHART_VERSION}")
+fi
 
 # Install or upgrade cert-manager
 echo "🚀 Installing cert-manager in namespace '${NAMESPACE}'..."
 VALUES_FILE_NATIVE="$(to_native_path "${VALUES_FILE}")"
-helm upgrade --install "${RELEASE_NAME}" "${HELM_CHART}" \
-  --version "${CHART_VERSION}" \
+helm upgrade --install "${RELEASE_NAME}" "${CHART_SOURCE}" \
+  ${VERSION_FLAG[@]+"${VERSION_FLAG[@]}"} \
   --namespace "${NAMESPACE}" \
   --create-namespace \
   --values "${VALUES_FILE_NATIVE}" \

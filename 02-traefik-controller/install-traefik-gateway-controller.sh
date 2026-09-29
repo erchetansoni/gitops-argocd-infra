@@ -84,15 +84,29 @@ apply_gateway_crds() {
 # Install Gateway API CRDs
 apply_gateway_crds
 
-# Add and update Traefik Helm repository
-echo "📦 Adding/Updating Traefik Helm repository..."
-helm repo add traefik https://traefik.github.io/charts --force-update
-helm repo update traefik
+# Locate Traefik Helm chart (offline local .tgz or online Helm repo)
+OFFLINE_CHART=""
+for candidate in "${SCRIPT_DIR}"/traefik-*.tgz "${SCRIPT_DIR}"/../airgap/charts/traefik-*.tgz; do
+  if [[ -f "$candidate" ]]; then
+    OFFLINE_CHART="$candidate"
+    break
+  fi
+done
+
+if [[ -n "${OFFLINE_CHART}" ]]; then
+  echo "📦 Offline environment: Using local Traefik Helm chart: ${OFFLINE_CHART}"
+  CHART_SOURCE="$(to_native_path "${OFFLINE_CHART}")"
+else
+  echo "📦 Adding/Updating Traefik Helm repository..."
+  helm repo add traefik https://traefik.github.io/charts --force-update
+  helm repo update traefik
+  CHART_SOURCE="traefik/traefik"
+fi
 
 # Install or upgrade Traefik Gateway Controller
 echo "🚀 Installing Traefik Gateway Controller in namespace '${NAMESPACE}'..."
 VALUES_FILE_NATIVE="$(to_native_path "${VALUES_FILE}")"
-helm upgrade --install "${RELEASE_NAME}" traefik/traefik \
+helm upgrade --install "${RELEASE_NAME}" "${CHART_SOURCE}" \
   --namespace "${NAMESPACE}" \
   --create-namespace \
   --values "${VALUES_FILE_NATIVE}" \
