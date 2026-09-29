@@ -29,7 +29,7 @@ Kubernetes Gateway API is the modern successor to Ingress. Rather than using leg
 ## File Structure
 
 ```
-02-Traefik-Gateway-Controller/
+02-traefik-controller/
 ├── install-traefik-gateway-controller.sh    # Installs Gateway CRDs and Traefik via Helm
 ├── k8s-gateway-api-crd-v1.6.2-install.yaml   # Offline Gateway API CRDs
 ├── traefik-values.yaml                     # Helm values for Traefik controller DaemonSet
@@ -40,7 +40,7 @@ Kubernetes Gateway API is the modern successor to Ingress. Rather than using leg
 
 ## Prerequisites
 
-* Active Kubernetes cluster running (from [01-create-cluster](file:///c:/Projects/My_Projects/GitOps-demo/01-create-cluster/README.md))
+* Active Kubernetes cluster running (from [01-create-cluster](../01-create-cluster/README.md))
 * [Helm](https://helm.sh/docs/intro/install/) CLI installed
 * `kubectl` configured with cluster context
 
@@ -51,7 +51,7 @@ Kubernetes Gateway API is the modern successor to Ingress. Rather than using leg
 Run the installer:
 
 ```bash
-bash 02-Traefik-Gateway-Controller/install-traefik-gateway-controller.sh
+bash 02-traefik-controller/install-traefik-gateway-controller.sh
 ```
 
 ### Verification
@@ -71,5 +71,6 @@ kubectl get pods -n traefik
 
 ## Next Step
 
-Once Traefik is running, configure the GatewayClass, Gateway listeners, and TLS certificates in:
-➡️ [03-Traefik-Gateway-Class](file:///c:/Projects/My_Projects/GitOps-demo/03-Traefik-Gateway-Class/README.md)
+Once Traefik is running, install cert-manager and configure the ClusterIssuer in:
+➡️ [03-cert-manager](../03-cert-manager/README.md)
+

@@ -1,4 +1,4 @@
-# 06 - Apps Layer (Workload Repository Integration)
+# 07 - Apps Layer (Workload Repository Integration)
 
 This directory connects Argo CD to the workload repository ([`erchetansoni/gitops-argocd-apps`](https://github.com/erchetansoni/gitops-argocd-apps)) and deploys the root **ApplicationSet**.
 
@@ -11,15 +11,15 @@ In the two-repository GitOps architecture:
 * **Workload Repository** (`gitops-argocd-apps`): Houses application Helm charts and per-environment overlays (`environments/main`, `environments/dev`).
 
 This directory connects the two by:
-1. Creating private repository authentication credentials in Argo CD ([01-install-repo-creds-secret.sh](file:///c:/Projects/My_Projects/GitOps-demo/06-apps/01-install-repo-creds-secret.sh)).
-2. Deploying the dynamic matrix ApplicationSet ([02-install-root-app.sh](file:///c:/Projects/My_Projects/GitOps-demo/06-apps/02-install-root-app.sh)).
+1. Creating private repository authentication credentials in Argo CD ([01-install-repo-creds-secret.sh](01-install-repo-creds-secret.sh)).
+2. Deploying the dynamic matrix ApplicationSet ([02-install-root-app.sh](02-install-root-app.sh)).
 
 ---
 
 ## File Structure
 
 ```
-06-apps/
+07-apps/
 ├── .env.example                     # Sample environment file
 ├── 01-install-repo-creds-secret.sh  # Script to configure GitHub credentials in Argo CD
 ├── 02-install-root-app.sh           # Script to deploy the root ApplicationSet
@@ -52,7 +52,7 @@ To allow Argo CD to pull manifests from your private repository `https://github.
 ### Step 1: Configure `.env`
 Copy the sample file and update your credentials:
 ```bash
-cp 06-apps/.env.example 06-apps/.env
+cp 07-apps/.env.example 07-apps/.env
 ```
 
 Ensure `.env` contains:
@@ -67,12 +67,12 @@ ARGOCD_HOST="argocd.chetan.local"
 
 ### Step 2: Configure Credentials in Argo CD
 ```bash
-bash 06-apps/01-install-repo-creds-secret.sh
+bash 07-apps/01-install-repo-creds-secret.sh
 ```
 
 ### Step 3: Deploy the Root ApplicationSet
 ```bash
-bash 06-apps/02-install-root-app.sh
+bash 07-apps/02-install-root-app.sh
 ```
 
 ---

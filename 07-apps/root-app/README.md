@@ -10,10 +10,10 @@ You can install or update the ApplicationSet directly using standard `kubectl`:
 
 ```bash
 # From repository root:
-kubectl apply -f 06-apps/root-app/root-applicationset.yaml
+kubectl apply -f 07-apps/root-app/root-applicationset.yaml
 
 # OR from inside this directory:
-cd 06-apps/root-app
+cd 07-apps/root-app
 kubectl apply -f root-applicationset.yaml
 ```
 

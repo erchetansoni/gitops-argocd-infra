@@ -7,7 +7,7 @@ A standalone PKI solution for generating private Root Certificate Authorities (C
 ## Directory Structure
 
 ```text
-03-Traefik-Gateway-Class/cert/tls-generator/
+04-traefik-gateway/cert/tls-generator/
 ├── README.md
 ├── server/
 │   ├── generate-certs.sh       # Bash script (Git Bash / Linux)
@@ -28,14 +28,14 @@ A standalone PKI solution for generating private Root Certificate Authorities (C
 
 ### On Git Bash / Linux
 ```bash
-cd 03-Traefik-Gateway-Class/cert/tls-generator/server
+cd 04-traefik-gateway/cert/tls-generator/server
 chmod +x generate-certs.sh
 ./generate-certs.sh
 ```
 
 ### On Windows (PowerShell)
 ```powershell
-cd 03-Traefik-Gateway-Class\cert\tls-generator\server
+cd 04-traefik-gateway\cert\tls-generator\server
 .\generate-certs.ps1
 ```
 
@@ -80,14 +80,14 @@ To enable the green lock 🔒 and eliminate `NET::ERR_CERT_COMMON_NAME_INVALID` 
 
 ## 3. Updating the Kubernetes TLS Secret
 
-After generating new certificates, copy them to `03-Traefik-Gateway-Class/cert/` and update the secret:
+After generating new certificates, copy them to `04-traefik-gateway/cert/` and update the secret:
 
 ```bash
-cp 03-Traefik-Gateway-Class/cert/tls-generator/output/* 03-Traefik-Gateway-Class/cert/
+cp 04-traefik-gateway/cert/tls-generator/output/* 04-traefik-gateway/cert/
 
 kubectl create secret tls domain-certificate-tls-secret \
-  --cert=03-Traefik-Gateway-Class/cert/wildcard_.chetan.local.crt \
-  --key=03-Traefik-Gateway-Class/cert/wildcard_.chetan.local.key \
+  --cert=04-traefik-gateway/cert/wildcard_.chetan.local.crt \
+  --key=04-traefik-gateway/cert/wildcard_.chetan.local.key \
   --namespace=default \
   --dry-run=client -o yaml | kubectl apply -f -
 ```

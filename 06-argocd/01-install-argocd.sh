@@ -34,7 +34,7 @@ to_native_path() {
 echo "🔍 Step 0: Checking Gateway API prerequisite ('main-gateway' in namespace default)..."
 if ! kubectl get gateway main-gateway -n default >/dev/null 2>&1; then
   echo "⚠️ WARNING: 'main-gateway' not found in namespace 'default'."
-  echo "👉 Ensure Step 03 (03-Traefik-Gateway-Class) has been executed so the Gateway is available."
+  echo "👉 Ensure Step 04 (04-traefik-gateway) has been executed so the Gateway is available."
 else
   echo "✅ Gateway 'main-gateway' is available."
 fi

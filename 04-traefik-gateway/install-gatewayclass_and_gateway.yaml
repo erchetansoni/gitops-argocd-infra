@@ -87,3 +87,32 @@ spec:
     #       from: All
 
 ---
+# ============================================================
+# 3. Wildcard TLS Certificate (Managed by cert-manager)
+# ============================================================
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: domain-wildcard-cert
+  namespace: default
+spec:
+  secretName: domain-certificate-tls-secret
+  issuerRef:
+    name: local-ca-issuer
+    kind: ClusterIssuer
+  commonName: "*.chetan.local"
+  dnsNames:
+    - "*.chetan.local"
+    - "chetan.local"
+    - "*.dev.chetan.local"
+    - "*.staging.chetan.local"
+    - "*.stage.chetan.local"
+    - "*.test.chetan.local"
+    - "*.prod.chetan.local"
+    - "localhost"
+  duration: 2160h # 90 days
+  renewBefore: 360h # 15 days
+  privateKey:
+    algorithm: RSA
+    size: 2048

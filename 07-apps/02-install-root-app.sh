@@ -98,7 +98,7 @@ if ! kubectl get secret "${REPO_SECRET_NAME}" -n "${NAMESPACE}" >/dev/null 2>&1 
    ! kubectl get secret -n "${NAMESPACE}" -l argocd.argoproj.io/secret-type=repository >/dev/null 2>&1; then
   echo "⚠️ WARNING: No repository credentials secret found in namespace '${NAMESPACE}'."
   echo "👉 If your Git repository is private, please run:"
-  echo "   ./06-apps/01-install-repo-creds-secret.sh"
+  echo "   ./07-apps/01-install-repo-creds-secret.sh"
 else
   echo "✅ Repository credentials secret detected in '${NAMESPACE}'."
 fi

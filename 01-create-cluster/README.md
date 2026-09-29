@@ -6,7 +6,7 @@ This directory provisions the local single-node Kubernetes cluster using [Kind (
 
 ## Overview
 
-The cluster is created with host port mappings on ports `80` and `443` so that the ingress controller / Gateway API proxy ([Traefik](file:///c:/Projects/My_Projects/GitOps-demo/02-Traefik-Gateway-Controller)) can directly accept HTTP and HTTPS traffic from your host machine (`localhost` or custom `.local` domains).
+The cluster is created with host port mappings on ports `80` and `443` so that the ingress controller / Gateway API proxy ([Traefik](../02-traefik-controller/README.md)) can directly accept HTTP and HTTPS traffic from your host machine (`localhost` or custom `.local` domains).
 
 ### Key Features
 * **Cluster Name**: `gitops-demo-cluster`
@@ -64,4 +64,5 @@ kubectl get nodes
 ## Next Step
 
 Once the cluster is up and running, proceed to:
-➡️ [02-Traefik-Gateway-Controller](file:///c:/Projects/My_Projects/GitOps-demo/02-Traefik-Gateway-Controller/README.md) to install the Kubernetes Gateway API CRDs and Traefik controller.
+➡️ [02-traefik-controller](../02-traefik-controller/README.md) to install the Kubernetes Gateway API CRDs and Traefik controller.
+

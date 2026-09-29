@@ -116,5 +116,5 @@ kubectl get secret "${REPO_SECRET_NAME}" -n "${NAMESPACE}" --show-labels
 echo ""
 echo "================================================================="
 echo "🎉 Argo CD can now authenticate with: ${REPO_URL}"
-echo "👉 Next step: Run ./06-apps/02-install-root-app.sh"
+echo "👉 Next step: Run ./07-apps/02-install-root-app.sh"
 echo "================================================================="

@@ -1,4 +1,4 @@
-# 03 - Traefik GatewayClass, Gateway & TLS Certificates
+# 04 - Traefik GatewayClass, Gateway & TLS Certificates
 
 This directory configures the **GatewayClass**, the root **Gateway** (`main-gateway`), and generates/manages local **TLS certificates** for multi-environment routing.
 
@@ -15,7 +15,7 @@ Kubernetes Gateway API separates infrastructure definitions from application rou
 
 ## Gateway Listeners
 
-In [install-gatewayclass_and_gateway.yaml](file:///c:/Projects/My_Projects/GitOps-demo/03-Traefik-Gateway-Class/install-gatewayclass_and_gateway.yaml), `main-gateway` configures three active listeners:
+In [install-gatewayclass_and_gateway.yaml](install-gatewayclass_and_gateway.yaml), `main-gateway` configures three active listeners:
 
 | Listener Name | Protocol | Port | Hostname Filter | Purpose |
 | :--- | :--- | :--- | :--- | :--- |
@@ -39,14 +39,14 @@ Under [RFC 6125](https://datatracker.ietf.org/doc/html/rfc6125), wildcard certif
 * `*.prod.chetan.local` (production apps)
 * `localhost`
 
-The Root CA certificate is located at [cert/tls-generator/ca-store/rootCA.crt](file:///c:/Projects/My_Projects/GitOps-demo/03-Traefik-Gateway-Class/cert/tls-generator/ca-store/rootCA.crt). Once installed into your host machine's Trusted Root Certification Authorities store, all subdomains display as fully secure (green lock 🔒) in Chrome and Edge.
+The Root CA certificate is located at [cert/tls-generator/ca-store/rootCA.crt](cert/tls-generator/ca-store/rootCA.crt). Once installed into your host machine's Trusted Root Certification Authorities store, all subdomains display as fully secure (green lock 🔒) in Chrome and Edge.
 
 ---
 
 ## File Structure
 
 ```
-03-Traefik-Gateway-Class/
+04-traefik-gateway/
 ├── cert/
 │   ├── tls-generator/                  # Internal PKI generator (CA + Server certs)
 │   │   ├── ca-store/                   # Private Root CA key & cert (reusable)
@@ -55,7 +55,7 @@ The Root CA certificate is located at [cert/tls-generator/ca-store/rootCA.crt](f
 │   │   └── server/                     # generate-certs.sh and generate-certs.ps1
 │   ├── wildcard_.chetan.local.crt      # Active certificate used by Kubernetes Secret
 │   └── wildcard_.chetan.local.key      # Active private key
-├── install-gatewayclass_and_gateway.yaml # GatewayClass & Gateway CR manifests
+├── install-gatewayclass_and_gateway.yaml # GatewayClass, Gateway & Certificate CR manifests
 ├── install-traefik-gatewayclass.sh      # Automated installer & validator script
 └── README.md                           # Documentation
 ```
@@ -67,23 +67,19 @@ The Root CA certificate is located at [cert/tls-generator/ca-store/rootCA.crt](f
 Run the installer:
 
 ```bash
-bash 03-Traefik-Gateway-Class/install-traefik-gatewayclass.sh
+bash 04-traefik-gateway/install-traefik-gatewayclass.sh
 ```
 
 ### What the Script Does:
 1. Validates Gateway API CRDs.
-2. Checks for certificates in `cert/` (or runs `tls-generator` if missing).
-3. Creates or updates the Kubernetes TLS secret:
-   ```bash
-   kubectl create secret tls domain-certificate-tls-secret \
-     --cert=03-Traefik-Gateway-Class/cert/wildcard_.chetan.local.crt \
-     --key=03-Traefik-Gateway-Class/cert/wildcard_.chetan.local.key \
-     --namespace=default
-   ```
-4. Applies `GatewayClass` and `Gateway` manifests.
-5. Verifies `Accepted=True` and `Programmed=True` status.
+2. Checks if `cert-manager` is installed:
+   * **If cert-manager is present**: Certificates are managed declaratively via `Certificate/domain-wildcard-cert` and `ClusterIssuer/local-ca-issuer`.
+   * **If cert-manager is absent**: Automatically falls back to creating `Secret/domain-certificate-tls-secret` from local `./cert/` files.
+3. Applies `GatewayClass`, `Gateway`, and `Certificate` manifests from [install-gatewayclass_and_gateway.yaml](install-gatewayclass_and_gateway.yaml).
+4. Verifies `Certificate` readiness (`Ready=True`) and Gateway status (`Accepted=True` and `Programmed=True`).
 
 ---
+
 
 ## Verification
 
@@ -107,4 +103,5 @@ Verify TLS handshake locally:
 ## Next Step
 
 With the Gateway accepting traffic, proceed to:
-➡️ [04-infra-apps](file:///c:/Projects/My_Projects/GitOps-demo/04-infra-apps/README.md) to manage infrastructure components via GitOps.
+➡️ [05-infra-apps](../05-infra-apps/README.md) to manage infrastructure components via GitOps.
+

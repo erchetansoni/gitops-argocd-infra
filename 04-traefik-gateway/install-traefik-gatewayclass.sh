@@ -51,7 +51,7 @@ check_gateway_crds() {
 
   if ! kubectl get crd gatewayclasses.gateway.networking.k8s.io gateways.gateway.networking.k8s.io >/dev/null 2>&1; then
     echo "❌ Gateway API CRDs not found in the cluster."
-    echo "👉 Please run '02-Traefik-Gateway-Controller/install-traefik-gateway-controller.sh' first to install the CRDs and Controller."
+    echo "👉 Please run '02-traefik-controller/install-traefik-gateway-controller.sh' first to install the CRDs and Controller."
     exit 1
   fi
 
@@ -208,12 +208,19 @@ configure_tls_secrets() {
 # 1. Verify Gateway API CRD prerequisites from Step 02
 check_gateway_crds
 
-# 2. Configure TLS Secrets for whatever certificates are in ./cert/
-configure_tls_secrets
+# 2. Check cert-manager and configure TLS
+USE_CERT_MANAGER=false
+if kubectl get crd certificates.cert-manager.io clusterissuers.cert-manager.io >/dev/null 2>&1; then
+  echo "🔒 Step 1: cert-manager detected. Certificate will be managed declaratively via cert-manager."
+  USE_CERT_MANAGER=true
+else
+  echo "⚠️ Step 1: cert-manager not detected. Falling back to local ./cert/ TLS secret creation..."
+  configure_tls_secrets
+fi
 
 # 3. Apply GatewayClass and Gateway manifests
 echo ""
-echo "🌐 Step 2: Applying GatewayClass and Gateway manifests (${MANIFEST_FILE})..."
+echo "🌐 Step 2: Applying GatewayClass, Gateway, and Certificate manifests (${MANIFEST_FILE})..."
 if [[ ! -f "${MANIFEST_FILE}" ]]; then
   echo "❌ Manifest file not found: ${MANIFEST_FILE}"
   exit 1
@@ -221,6 +228,18 @@ fi
 
 MANIFEST_NATIVE="$(to_native_path "${MANIFEST_FILE}")"
 kubectl apply -f "${MANIFEST_NATIVE}"
+
+# If cert-manager is active, wait for Certificate issuance
+if [[ "$USE_CERT_MANAGER" = true ]]; then
+  echo ""
+  echo "⏳ Waiting for cert-manager to issue Certificate 'domain-wildcard-cert'..."
+  if kubectl wait --for=condition=Ready certificate/domain-wildcard-cert -n "${SECRET_NAMESPACE}" --timeout=60s > /dev/null 2>&1; then
+    echo "✅ Certificate 'domain-wildcard-cert' is READY=True (Secret '${SECRET_NAME}' populated)"
+  else
+    echo "⚠️ Waiting for Certificate Ready condition timed out. Current certificate status:"
+    kubectl get certificate domain-wildcard-cert -n "${SECRET_NAMESPACE}" -o wide || true
+  fi
+fi
 
 # 4. Verification & Auto-Validation
 echo ""
@@ -230,6 +249,7 @@ echo "================================================================="
 
 echo "📌 1. GatewayClass Summary:"
 kubectl get gatewayclass
+
 
 echo "⏳ Checking GatewayClass 'traefik' Accepted status..."
 if kubectl wait --for=condition=Accepted=True gatewayclass/traefik --timeout=60s > /dev/null 2>&1; then

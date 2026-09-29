@@ -1,4 +1,4 @@
-# 05 - Argo CD (GitOps Control Plane)
+# 06 - Argo CD (GitOps Control Plane)
 
 This directory installs, configures, and exposes **Argo CD** as the central GitOps continuous delivery engine.
 
@@ -16,9 +16,9 @@ Argo CD automates the deployment of the desired application states declared in G
 ## File Structure
 
 ```
-05-argocd/
+06-argocd/
 ├── 01-install-argocd.sh         # Installs Argo CD, applies configs, and prints admin password
-├── 02-adopt-infra-apps.sh       # Adopts Traefik and Metrics Server into Argo CD management
+├── 02-adopt-infra-apps.sh       # Adopts Traefik, Metrics Server, and cert-manager into Argo CD management
 ├── argocd-configmaps.yaml       # ConfigMaps: argocd-cm and argocd-cmd-params-cm
 ├── argocd-httproute.yaml        # Gateway API HTTPRoute for argocd.chetan.local
 └── README.md                    # Documentation
@@ -28,7 +28,7 @@ Argo CD automates the deployment of the desired application states declared in G
 
 ## Key Configurations Explained
 
-In [argocd-configmaps.yaml](file:///c:/Projects/My_Projects/GitOps-demo/05-argocd/argocd-configmaps.yaml):
+In [argocd-configmaps.yaml](argocd-configmaps.yaml):
 
 ### 1. Insecure Server Behind Reverse Proxy
 ```yaml
@@ -60,21 +60,21 @@ When Kubernetes processes an `HTTPRoute`, the Gateway controller injects schema 
 
 ### Step 1: Install Argo CD & Configure UI Access
 ```bash
-bash 05-argocd/01-install-argocd.sh
+bash 06-argocd/01-install-argocd.sh
 ```
 
 This will:
 * Install Argo CD manifests into the `argocd` namespace.
-* Apply [argocd-configmaps.yaml](file:///c:/Projects/My_Projects/GitOps-demo/05-argocd/argocd-configmaps.yaml).
-* Apply [argocd-httproute.yaml](file:///c:/Projects/My_Projects/GitOps-demo/05-argocd/argocd-httproute.yaml).
+* Apply [argocd-configmaps.yaml](argocd-configmaps.yaml).
+* Apply [argocd-httproute.yaml](argocd-httproute.yaml).
 * Print the initial `admin` password.
 * Restart the `argocd-server` pod to load new settings.
 
 ### Step 2: Adopt Platform Infrastructure Apps
 ```bash
-bash 05-argocd/02-adopt-infra-apps.sh
+bash 06-argocd/02-adopt-infra-apps.sh
 ```
-Takes the pre-installed Traefik Gateway controller and Metrics Server and brings them under Argo CD GitOps management without terminating running pods.
+Takes pre-installed infrastructure applications (Traefik, Metrics Server, and cert-manager) and brings them under Argo CD GitOps management without terminating running pods.
 
 ---
 
@@ -96,4 +96,4 @@ Takes the pre-installed Traefik Gateway controller and Metrics Server and brings
 ## Next Step
 
 With Argo CD running and managing platform infrastructure, proceed to:
-➡️ [06-apps](file:///c:/Projects/My_Projects/GitOps-demo/06-apps/README.md) to connect the workload repository (`gitops-argocd-apps`) and deploy applications.
+➡️ [07-apps](../07-apps/README.md) to connect the workload repository (`gitops-argocd-apps`) and deploy applications.
