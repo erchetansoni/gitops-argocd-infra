@@ -4,23 +4,28 @@
 .env.*.local
 *.env
 !*.env.example
-05-apps/.env
+07-apps/.env
 
-# Certificate files (not to be committed to git)
-03-Traefik-Gateway-Class/cert/tls-generator/ca-store/*
-03-Traefik-Gateway-Class/cert/tls-generator/server/*
-03-Traefik-Gateway-Class/cert/tls-generator/client/*
-03-Traefik-Gateway-Class/cert/tls-generator/output/*
+# Certificate files and private keys (never commit secrets / generated PKI to git)
+04-traefik-gateway/cert/tls-generator/ca-store/*
+04-traefik-gateway/cert/tls-generator/server/*
+04-traefik-gateway/cert/tls-generator/client/*
+04-traefik-gateway/cert/tls-generator/output/*
 
-# Ignore all output files except .gitkeep (so the directory is version controlled)
-!03-Traefik-Gateway-Class/cert/tls-generator/ca-store/.gitkeep
-!03-Traefik-Gateway-Class/cert/tls-generator/server/.gitkeep
-!03-Traefik-Gateway-Class/cert/tls-generator/client/.gitkeep
-!03-Traefik-Gateway-Class/cert/tls-generator/output/.gitkeep
+# Preserve directory structure with .gitkeep
+!04-traefik-gateway/cert/tls-generator/ca-store/.gitkeep
+!04-traefik-gateway/cert/tls-generator/server/.gitkeep
+!04-traefik-gateway/cert/tls-generator/client/.gitkeep
+!04-traefik-gateway/cert/tls-generator/output/.gitkeep
 
-# Ignore all script files except .gitkeep (so the directory is version controlled)
-!03-Traefik-Gateway-Class/cert/tls-generator/server/*.sh
-!03-Traefik-Gateway-Class/cert/tls-generator/server/*.ps1
+# Track scripts in server and client
+!04-traefik-gateway/cert/tls-generator/server/*.sh
+!04-traefik-gateway/cert/tls-generator/server/*.ps1
+!04-traefik-gateway/cert/tls-generator/client/*.sh
+!04-traefik-gateway/cert/tls-generator/client/*.ps1
+
+# Log files
+*.log
 
 # Temporary / OS files
 .DS_Store
