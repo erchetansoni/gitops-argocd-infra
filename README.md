@@ -333,8 +333,10 @@ When moving from local KinD to a production **3-node K3s cluster with no interne
 * **Complete Guide**: Refer to **[`airgap/README.md`](airgap/README.md)**.
 * **Pre-bundled Assets**:
   * Run `bash airgap/bundle-offline-assets.sh` on a connected machine to export all 9 platform container images into `airgap/airgap-images.tar` and package Helm charts.
-  * Load images on all 3 K3s nodes with `sudo bash airgap/load-offline-assets.sh`.
+  * Load images on all 3 K3s nodes with `sudo bash airgap/load-offline-assets.sh` (automatically cleans stale archives and prunes dangling images before loading, with `--clean-source` option to free node disk space).
+  * Clean local image tarballs (`*.tar`, `*.tgz`, `*.tar.gz`, `*.tar.zst`) at any time using `./clean-images.sh` or `.\clean-images.ps1`.
 * **K3s Requirement**: Install K3s with `--disable=traefik` to prevent K3s default Traefik from conflicting with Gateway API.
+
 * All deployment scripts (`02-traefik-controller`, `03-cert-manager`, `05-infra-apps`, `06-argocd`) automatically detect and use the local `.tgz` charts and offline manifests without internet connectivity.
 
 ---

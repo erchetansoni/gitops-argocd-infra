@@ -177,10 +177,21 @@ sudo kubectl get nodes
 Run this command **on Node 1, Node 2, and Node 3**:
 
 ```bash
+# Standard run (Cleans stale images/tarballs on node, then loads fresh images):
 sudo bash airgap/load-offline-assets.sh
+
+# Clean, load images, and delete source tarball afterwards to reclaim disk:
+sudo bash airgap/load-offline-assets.sh --clean-source
+
+# Skip the cleanup phase if you only want to load:
+sudo bash airgap/load-offline-assets.sh --skip-clean
 ```
 
-This places `airgap-images.tar` into `/var/lib/rancher/k3s/agent/images/` and imports all platform images directly into K3s containerd (`k8s.io` namespace).
+#### What this script does:
+1. **Pre-Load Cleanup**: Cleans any existing or stale image archives (`*.tar`, `*.tgz`, `*.tar.gz`, `*.tar.zst`) in `/var/lib/rancher/k3s/agent/images/` and prunes dangling container images (`k3s crictl rmi --prune` / `docker image prune`) to prevent disk bloat.
+2. **Image Loading**: Copies the fresh image archive into `/var/lib/rancher/k3s/agent/images/` and imports all platform images directly into K3s containerd (`k8s.io` namespace).
+3. **Verification**: Verifies that required platform images (Traefik, cert-manager, Metrics Server, Argo CD, Dex, Redis) are present in containerd.
+4. **Post-Load Cleanup (Optional)**: If `--clean-source` is passed, deletes the source `airgap-images.tar` after import to free up space on smaller nodes.
 
 ---
 
@@ -279,3 +290,25 @@ kubectl top pods -A
 # 5. Access Argo CD:
 curl -k https://argocd.chetan.local/
 ```
+
+---
+
+## 🧹 Cleaning Offline Assets & Large Image Archives
+
+When you need to reclaim disk space by deleting local container image tarballs (`*.tar`, `*.tgz`, `*.tar.gz`, `*.tar.zst`):
+
+```bash
+# 1. Preview matching files and space to reclaim without deleting anything:
+./clean-images.sh --dry-run
+# Or in PowerShell:
+.\clean-images.ps1 -DryRun
+
+# 2. Interactively delete archives across the repository:
+./clean-images.sh
+
+# 3. Clean only the airgap directory:
+./clean-images.sh ./airgap
+# Or use the shortcut:
+./airgap/clean-offline-assets.sh
+```
+
