@@ -84,12 +84,13 @@ Each numbered directory encapsulates a specific stage of the platform bootstrap 
 
 | Directory | Purpose | Key Manifests & Scripts |
 | :--- | :--- | :--- |
-| **[`01-create-cluster`](file:///c:/Projects/My_Projects/GitOps-demo/01-create-cluster/README.md)** | Local Kind Kubernetes cluster | `kind-cluster-config.yaml`, `create-cluster.sh` |
-| **[`02-Traefik-Gateway-Controller`](file:///c:/Projects/My_Projects/GitOps-demo/02-Traefik-Gateway-Controller/README.md)** | Gateway API CRDs & Traefik v3 DaemonSet | `install-traefik-gateway-controller.sh`, `traefik-values.yaml` |
-| **[`03-Traefik-Gateway-Class`](file:///c:/Projects/My_Projects/GitOps-demo/03-Traefik-Gateway-Class/README.md)** | GatewayClass, Gateway listeners & TLS | `install-gatewayclass_and_gateway.yaml`, `cert/tls-generator/` |
-| **[`04-infra-apps`](file:///c:/Projects/My_Projects/GitOps-demo/04-infra-apps/README.md)** | Platform infra apps (Traefik & Metrics Server) | `infra-apps-root.yaml`, `01-traefik-gateway/`, `02-metrics-server/` |
-| **[`05-argocd`](file:///c:/Projects/My_Projects/GitOps-demo/05-argocd/README.md)** | Argo CD install, ConfigMaps, HTTPRoute & adoption | `01-install-argocd.sh`, `02-adopt-infra-apps.sh`, `argocd-httproute.yaml` |
-| **[`06-apps`](file:///c:/Projects/My_Projects/GitOps-demo/06-apps/README.md)** | Workload Git repo credentials & Root ApplicationSet | `01-install-repo-creds-secret.sh`, `02-install-root-app.sh`, `root-app/` |
+| **[`01-create-cluster`](file:///c:/Projects/My_Projects/gitops-argocd-infra/01-create-cluster/README.md)** | Local Kind Kubernetes cluster | `kind-cluster-config.yaml`, `create-cluster.sh` |
+| **[`02-traefik-controller`](file:///c:/Projects/My_Projects/gitops-argocd-infra/02-traefik-controller/README.md)** | Gateway API CRDs & Traefik v3 DaemonSet | `install-traefik-gateway-controller.sh`, `traefik-values.yaml` |
+| **[`03-cert-manager`](file:///c:/Projects/My_Projects/gitops-argocd-infra/03-cert-manager/README.md)** | cert-manager v1.21.2 & ClusterIssuer | `install-cert-manager.sh`, `cluster-issuer.yaml` |
+| **[`04-traefik-gateway`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/README.md)** | GatewayClass, Gateway listeners & TLS Certificate | `install-gatewayclass_and_gateway.yaml`, `cert/tls-generator/` |
+| **[`05-infra-apps`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/README.md)** | Platform infra apps (Traefik, Metrics Server, cert-manager) | `infra-apps-root.yaml`, `01-traefik-gateway/`, `02-metrics-server/` |
+| **[`06-argocd`](file:///c:/Projects/My_Projects/gitops-argocd-infra/06-argocd/README.md)** | Argo CD install, ConfigMaps, HTTPRoute & adoption | `01-install-argocd.sh`, `02-adopt-infra-apps.sh`, `argocd-httproute.yaml` |
+| **[`07-apps`](file:///c:/Projects/My_Projects/gitops-argocd-infra/07-apps/README.md)** | Workload Git repo credentials & Root ApplicationSet | `01-install-repo-creds-secret.sh`, `02-install-root-app.sh`, `root-app/` |
 
 ---
 
@@ -108,7 +109,7 @@ Before running the bootstrap scripts, ensure your workstation has:
 
 ## 🚀 End-to-End Setup Guide
 
-Follow the sequence from `01` to `06` to stand up the entire platform:
+Follow the sequence from `01` to `07` to stand up the entire platform:
 
 ### Step 1: Create the Kind Cluster
 ```bash
@@ -118,44 +119,50 @@ bash 01-create-cluster/create-cluster.sh
 
 ### Step 2: Install Traefik Gateway API Controller
 ```bash
-bash 02-Traefik-Gateway-Controller/install-traefik-gateway-controller.sh
+bash 02-traefik-controller/install-traefik-gateway-controller.sh
 ```
 * Installs standard Gateway API CRDs (`v1.6.2`).
 * Deploys Traefik v3 DaemonSet with entrypoint HTTP-to-HTTPS redirect enabled.
 
-### Step 3: Deploy GatewayClass, Gateway & TLS Certificates
+### Step 3: Install cert-manager & ClusterIssuer
 ```bash
-bash 03-Traefik-Gateway-Class/install-traefik-gatewayclass.sh
+bash 03-cert-manager/install-cert-manager.sh
 ```
-* Generates private Root CA and wildcard certificate with SANs (`*.chetan.local`, `*.dev.chetan.local`).
-* Creates `domain-certificate-tls-secret` in namespace `default`.
-* Creates GatewayClass `traefik` and Gateway `main-gateway`.
+* Deploys cert-manager `v1.21.2` with CRDs and Gateway API integration.
+* Injects Root CA into `local-root-ca-secret` and configures `ClusterIssuer/local-ca-issuer`.
 
-### Step 4: Install Argo CD & Expose UI
+### Step 4: Deploy GatewayClass, Gateway & TLS Certificate
 ```bash
-bash 05-argocd/01-install-argocd.sh
+bash 04-traefik-gateway/install-traefik-gatewayclass.sh
 ```
-* Installs Argo CD in `argocd` namespace.
-* Applies enterprise ConfigMaps (`server.insecure: true`, Kustomize build options, HTTPRoute ignoreDifferences).
-* Creates Gateway API route `argocd-server-route` for `https://argocd.chetan.local`.
+* Deploys GatewayClass `traefik` and Gateway `main-gateway`.
+* Declares `Certificate/domain-wildcard-cert`, which cert-manager automatically signs and populates into `domain-certificate-tls-secret`.
 
-### Step 5: Adopt Platform Infrastructure Apps
+### Step 5: Install Metrics Server
 ```bash
-bash 05-argocd/02-adopt-infra-apps.sh
+bash 05-infra-apps/02-metrics-server/install-metrics-server.sh
 ```
-* Seamlessly transfers ownership of Traefik and Metrics Server to Argo CD without terminating running pods.
+* Installs Metrics Server for cluster resource metrics (`kubectl top nodes`, `kubectl top pods`).
 
-### Step 6: Connect Workload Repo & Deploy ApplicationSet
+### Step 6: Install Argo CD & Expose UI
+```bash
+bash 06-argocd/01-install-argocd.sh
+bash 06-argocd/02-adopt-infra-apps.sh
+```
+* Installs Argo CD in `argocd` namespace and exposes UI via `https://argocd.chetan.local`.
+* Adopts Traefik, Metrics Server, and cert-manager into declarative GitOps control.
+
+### Step 7: Connect Workload Repo & Deploy ApplicationSet
 ```bash
 # 1. Configure GitHub token in .env:
-cp 06-apps/.env.example 06-apps/.env
-# Edit 06-apps/.env with your GitHub Personal Access Token (PAT)
+cp 07-apps/.env.example 07-apps/.env
+# Edit 07-apps/.env with your GitHub Personal Access Token (PAT)
 
 # 2. Apply GitHub repo credentials secret:
-bash 06-apps/01-install-repo-creds-secret.sh
+bash 07-apps/01-install-repo-creds-secret.sh
 
 # 3. Deploy the root Matrix ApplicationSet:
-bash 06-apps/02-install-root-app.sh
+bash 07-apps/02-install-root-app.sh
 ```
 * Argo CD connects to `https://github.com/erchetansoni/gitops-argocd-apps.git`.
 * Discovers all environment folders (`environments/main`, `environments/dev`) and deploys all application microservices automatically.
@@ -185,7 +192,7 @@ Add the following mappings to your local hosts file:
 To eliminate browser security warnings on `*.chetan.local` and `*.dev.chetan.local`:
 
 1. Locate the Root CA certificate:
-   [`03-Traefik-Gateway-Class/cert/tls-generator/client/rootCA.crt`](file:///c:/Projects/My_Projects/GitOps-demo/03-Traefik-Gateway-Class/cert/tls-generator/client/rootCA.crt)
+   [`04-traefik-gateway/cert/tls-generator/client/rootCA.crt`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/cert/tls-generator/client/rootCA.crt)
 2. Double-click the file -> **Install Certificate...** -> select **Local Machine** -> **Next**.
 3. Choose **Place all certificates in the following store** -> click **Browse**.
 4. Select **Trusted Root Certification Authorities** -> **OK** -> **Finish**.
@@ -227,7 +234,7 @@ While this repository defaults to a local **KinD** cluster with Docker port-mapp
 | **Traefik hostPort** | `80` & `443` enabled | Disabled | Disabled | Optional (or use MetalLB VIP) |
 | **External Access / IP** | `127.0.0.1` | GCP External Static/Ephemeral IP | AWS NLB DNS name (`*.elb.amazonaws.com`) | Dedicated LAN VIP (e.g. `192.168.1.200`) |
 | **DNS Resolution** | Workstation `/etc/hosts` | Cloud DNS (`*.yourdomain.com` -> IP) | Route 53 (`*.yourdomain.com` -> NLB) | Pi-hole / pfSense / Local DNS Server |
-| **TLS Certificates** | Self-signed Root CA (`03-Traefik...`) | `cert-manager` + Let's Encrypt | `cert-manager` or AWS ACM | `cert-manager` (Let's Encrypt via DNS-01) |
+| **TLS Certificates** | Local Root CA via `cert-manager` (`03-cert-manager`) | `cert-manager` + Let's Encrypt / Commercial | `cert-manager` or AWS ACM | `cert-manager` (Let's Encrypt / Commercial) |
 
 ---
 
@@ -320,8 +327,50 @@ When running a 3-node Kubernetes cluster inside Proxmox (e.g., using **Talos Lin
 
 ---
 
+### 4. 🔒 Air-Gapped 3-Node K3s Cluster
+
+When moving from local KinD to a production **3-node K3s cluster with no internet access**:
+* **Complete Guide**: Refer to **[`airgap/README.md`](airgap/README.md)**.
+* **Pre-bundled Assets**:
+  * Run `bash airgap/bundle-offline-assets.sh` on a connected machine to export all 9 platform container images into `airgap/airgap-images.tar` and package Helm charts.
+  * Load images on all 3 K3s nodes with `sudo bash airgap/load-offline-assets.sh` (automatically cleans stale archives and prunes dangling images before loading, with `--clean-source` option to free node disk space).
+  * Clean local image tarballs (`*.tar`, `*.tgz`, `*.tar.gz`, `*.tar.zst`) at any time using `./clean-images.sh` or `.\clean-images.ps1`.
+* **K3s Requirement**: Install K3s with `--disable=traefik` to prevent K3s default Traefik from conflicting with Gateway API.
+
+* All deployment scripts (`02-traefik-controller`, `03-cert-manager`, `05-infra-apps`, `06-argocd`) automatically detect and use the local `.tgz` charts and offline manifests without internet connectivity.
+
+---
+
+## 💳 Managing Commercial / Paid Certificates in Production
+
+When purchasing commercial SSL/TLS certificates (DigiCert, Sectigo, GlobalSign, GoDaddy, etc.) for real production domains (`*.yourdomain.com`):
+
+### 1. Bundle Certificate Chain
+Always combine the server certificate and the intermediate CA bundle into a full-chain file:
+```bash
+cat your_domain.crt ca-bundle.crt > fullchain.crt
+```
+
+### 2. Deployment Options
+* **Direct Secret (Manual / Non-GitOps)**:
+  ```bash
+  kubectl create secret tls domain-certificate-tls-secret \
+    --cert=fullchain.crt \
+    --key=your_domain.key \
+    --namespace=default
+  ```
+* **GitOps-Safe (Bitnami Sealed Secrets / External Secrets Operator)**:
+  Never commit `your_domain.key` in plaintext. Encrypt via `kubeseal` into a `SealedSecret` or sync directly from AWS Secrets Manager / Azure Key Vault / GCP Secret Manager using the **External Secrets Operator (ESO)**.
+* **Automated Renewal via cert-manager (ACME + EAB)**:
+  Commercial CAs (Sectigo, DigiCert, ZeroSSL) support ACME with External Account Binding (EAB), allowing cert-manager to negotiate and rotate paid certificates automatically before expiration.
+
+*For complete configuration manifests, see [03-cert-manager/README.md](03-cert-manager/README.md) and [04-traefik-gateway/README.md](04-traefik-gateway/README.md).*
+
+---
+
 ## 🤝 Companion Repository
 
 To configure applications, modify Helm values, or create new environment branches (`dev`, `staging`, `prod`), refer to:  
 👉 **[`erchetansoni/gitops-argocd-apps`](https://github.com/erchetansoni/gitops-argocd-apps)**
+
 
