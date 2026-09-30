@@ -1,0 +1,30 @@
+# cert-manager Helm values
+# Reference: https://github.com/cert-manager/cert-manager/tree/master/deploy/charts/cert-manager
+
+# Automatically install and manage the cert-manager CRDs
+crds:
+  enabled: true
+
+# Enable Gateway API integration in cert-manager
+extraArgs:
+  - --enable-gateway-api
+
+# Resource requests for controller
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# Resource requests for webhook
+webhook:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# Resource requests for cainjector
+cainjector:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi

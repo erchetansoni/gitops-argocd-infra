@@ -1,0 +1,118 @@
+# ============================================================
+# MODERN KUBERNETES GATEWAY API LAB
+# ============================================================
+
+# ============================================================
+# 1. GatewayClass
+# ============================================================
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+
+metadata:
+  name: traefik
+
+spec:
+  controllerName: traefik.io/gateway-controller
+
+---
+# ============================================================
+# 2. Gateway
+# ============================================================
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+
+metadata:
+  name: main-gateway
+  namespace: default
+
+spec:
+  gatewayClassName: traefik
+
+  listeners:
+    # --------------------------------------------------------
+    # HTTP listener (allows all hostnames for redirection)
+    # --------------------------------------------------------
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+
+    # --------------------------------------------------------
+    # HTTPS listener - chetan.local
+    # --------------------------------------------------------
+    - name: https-chetan
+      protocol: HTTPS
+      port: 443
+      hostname: "*.chetan.local"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: domain-certificate-tls-secret
+      allowedRoutes:
+        namespaces:
+          from: All
+
+    # --------------------------------------------------------
+    # HTTPS listener - dev environment (*.dev.chetan.local)
+    # --------------------------------------------------------
+    - name: https-dev
+      protocol: HTTPS
+      port: 443
+      hostname: "*.dev.chetan.local"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: domain-certificate-tls-secret
+      allowedRoutes:
+        namespaces:
+          from: All
+
+    # # --------------------------------------------------------
+    # # HTTPS listener - avgol.com
+    # # --------------------------------------------------------
+    # - name: https-avgol
+    #   protocol: HTTPS
+    #   port: 443
+    #   hostname: "*.avgol.com"
+    #   tls:
+    #     mode: Terminate
+    #     certificateRefs:
+    #       - name: avgol-com-tls
+    #   allowedRoutes:
+    #     namespaces:
+    #       from: All
+
+---
+# ============================================================
+# 3. Wildcard TLS Certificate (Managed by cert-manager)
+# ============================================================
+
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: domain-wildcard-cert
+  namespace: default
+spec:
+  secretName: domain-certificate-tls-secret
+  issuerRef:
+    name: local-ca-issuer
+    kind: ClusterIssuer
+  commonName: "*.chetan.local"
+  dnsNames:
+    - "*.chetan.local"
+    - "chetan.local"
+    - "*.dev.chetan.local"
+    - "*.staging.chetan.local"
+    - "*.stage.chetan.local"
+    - "*.test.chetan.local"
+    - "*.prod.chetan.local"
+    - "localhost"
+  duration: 2160h # 90 days
+  renewBefore: 360h # 15 days
+  privateKey:
+    algorithm: RSA
+    size: 2048

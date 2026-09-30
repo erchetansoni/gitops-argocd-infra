@@ -1,0 +1,112 @@
+apiVersion: v1
+entries:
+  cert-manager:
+  - annotations:
+      artifacthub.io/category: security
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/prerelease: "false"
+      artifacthub.io/signKey: |
+        fingerprint: 1020CF3C033D4F35BAE1C19E1226061C665DF13E
+        url: https://cert-manager.io/public-keys/cert-manager-keyring-2021-09-20-1020CF3C033D4F35BAE1C19E1226061C665DF13E.gpg
+    apiVersion: v2
+    appVersion: v1.21.2
+    created: "2026-09-29T16:48:01.8363221+05:30"
+    description: A Helm chart for cert-manager
+    digest: 73a56e1728edd6c99f1f31082618c3259d279a76b7ebd3d4bdc5475c2442d34a
+    home: https://cert-manager.io
+    icon: https://raw.githubusercontent.com/cert-manager/community/4d35a69437d21b76322157e6284be4cd64e6d2b7/logo/logo-small.png
+    keywords:
+    - cert-manager
+    - kube-lego
+    - letsencrypt
+    - tls
+    kubeVersion: '>= 1.22.0-0'
+    maintainers:
+    - email: cert-manager-maintainers@googlegroups.com
+      name: cert-manager-maintainers
+      url: https://cert-manager.io
+    name: cert-manager
+    sources:
+    - https://github.com/cert-manager/cert-manager
+    urls:
+    - cert-manager-v1.21.2.tgz
+    version: v1.21.2
+  metrics-server:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: added
+          description: "Add chart option to permit setting hostUsers for additional isolation."
+        - kind: added
+          description: "Add `namespaceOverride` which allows deploying to a namespace other than `.Release.namespace`."
+        - kind: changed
+          description: "Apply `tls.certManager.annotations` and `tls.certManager.labels` to the Cert Manager `Certificate` resource; these values are documented but were previously never rendered."
+        - kind: changed
+          description: "Use `metrics-server.fullname` instead of `metrics-server.name` for ClusterRole."
+        - kind: changed
+          description: "Update the _Metrics Server_ OCI image to [`0.9.0`](https://github.com/kubernetes-sigs/metrics-server/releases/tag/v0.9.0)."
+        - kind: fixed
+          description: "Stop rendering `annotations: null` on the cert-manager `Issuer`, which referenced an undefined `additionalAnnotations` value. This mirrors the earlier APIService fix and prevents permanent GitOps `OutOfSync`."
+    apiVersion: v2
+    appVersion: 0.9.0
+    created: "2026-09-29T16:48:01.8474031+05:30"
+    description: Metrics Server is a scalable, efficient source of container resource
+      metrics for Kubernetes built-in autoscaling pipelines.
+    digest: c2ca1185c01e6e7f53dd1b7d131f0c9b3fa50e003ed068b784563a1b5a3422a1
+    home: https://github.com/kubernetes-sigs/metrics-server
+    icon: https://avatars.githubusercontent.com/u/36015203?s=400&v=4
+    keywords:
+    - kubernetes
+    - metrics-server
+    - metrics
+    maintainers:
+    - name: stevehipwell
+      url: https://github.com/stevehipwell
+    - name: krmichel
+      url: https://github.com/krmichel
+    - name: endrec
+      url: https://github.com/endrec
+    name: metrics-server
+    sources:
+    - https://github.com/kubernetes-sigs/metrics-server
+    type: application
+    urls:
+    - metrics-server-3.14.0.tgz
+    version: 3.14.0
+  traefik:
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: "fix: use kubeversion to determine PDB apiVersion"
+        - kind: added
+          description: "feat(hub): support transparency logs"
+      traefik.io/hub-max-version: v3.20.13
+      traefik.io/hub-min-version: v3.19.3
+      traefik.io/proxy-max-version: v3.7.13
+      traefik.io/proxy-min-version: v3.6.0
+    apiVersion: v2
+    appVersion: v3.7.13
+    created: "2026-09-29T16:48:01.8849291+05:30"
+    description: A Traefik based Kubernetes ingress controller
+    digest: cd7254ea853da73bdb88edc896f079b88d43ffa0bfe699fdbf21081361eac365
+    home: https://traefik.io/
+    icon: https://raw.githubusercontent.com/traefik/traefik/master/docs/content/assets/img/traefik.logo.png
+    keywords:
+    - traefik
+    - ingress
+    - networking
+    kubeVersion: '>=1.25.0-0'
+    maintainers:
+    - email: michel.loiseleur@traefik.io
+      name: mloiseleur
+    - email: remi.buisson@traefik.io
+      name: darkweaver87
+    - name: jnoordsij
+    name: traefik
+    sources:
+    - https://github.com/traefik/traefik-helm-chart
+    - https://github.com/traefik/traefik
+    type: application
+    urls:
+    - traefik-41.6.0.tgz
+    version: 41.6.0
+generated: "2026-09-29T16:48:01.8081038+05:30"

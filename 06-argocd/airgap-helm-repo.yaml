@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: airgap-helm-repo
+  namespace: argocd
+  labels:
+    app: airgap-helm-repo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: airgap-helm-repo
+  template:
+    metadata:
+      labels:
+        app: airgap-helm-repo
+    spec:
+      containers:
+        - name: chart-server
+          image: quay.io/argoproj/argocd:v3.5.3
+          imagePullPolicy: IfNotPresent
+          command:
+            - perl
+            - -e
+            - |
+              use strict;
+              use warnings;
+              use IO::Socket::INET;
+              $| = 1;
+              my $s = IO::Socket::INET->new(LocalPort=>8080,Type=>SOCK_STREAM,Reuse=>1,Listen=>20) or die $!;
+              while(my $c = $s->accept()) {
+                  my $req = <$c>;
+                  if (defined $req && $req =~ /^GET\s+([^\s\?]+)/) {
+                      my $p = $1;
+                      $p = "/index.yaml" if ($p eq "/" or $p eq "");
+                      $p =~ s/\.\.//g;
+                      my $fp = "/www$p";
+                      if (-f $fp && open(my $fh, "<", $fp)) {
+                          binmode $fh; binmode $c;
+                          my $sz = -s $fp;
+                          my $ct = ($fp =~ /\.ya?ml$/) ? "text/yaml" : "application/gzip";
+                          print $c "HTTP/1.1 200 OK\r\nContent-Length: $sz\r\nContent-Type: $ct\r\nConnection: close\r\n\r\n";
+                          my $b; while(read($fh, $b, 8192)) { print $c $b; }
+                          close $fh;
+                      } else {
+                          print $c "HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n";
+                      }
+                  }
+                  close $c;
+              }
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: charts-volume
+              mountPath: /www
+      volumes:
+        - name: charts-volume
+          secret:
+            secretName: airgap-helm-charts
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: airgap-helm-repo
+  namespace: argocd
+  labels:
+    app: airgap-helm-repo
+spec:
+  selector:
+    app: airgap-helm-repo
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
