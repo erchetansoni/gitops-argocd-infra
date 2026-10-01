@@ -112,7 +112,11 @@ if command -v helm &>/dev/null; then
   helm pull jetstack/cert-manager --version v1.21.2 -d "${CHARTS_DIR_NATIVE}"
   helm pull metrics-server/metrics-server --version 3.14.0 -d "${CHARTS_DIR_NATIVE}"
   helm repo index "${CHARTS_DIR_NATIVE}"
-  echo "✅ Helm charts saved and repository index.yaml generated."
+  # Standardize index.yaml by stripping dynamic timestamps to ensure reproducible Git diffs
+  if [[ -f "${CHARTS_DIR}/index.yaml" ]]; then
+    sed -i -E '/^[[:space:]]*(created|generated):/d' "${CHARTS_DIR}/index.yaml" 2>/dev/null || true
+  fi
+  echo "✅ Helm charts saved and repository index.yaml generated (standardized)."
 else
   echo "ℹ️ Helm not found on workstation; using pre-bundled charts if present."
 fi

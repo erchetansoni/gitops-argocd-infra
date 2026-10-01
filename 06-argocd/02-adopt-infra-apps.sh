@@ -74,6 +74,7 @@ if [[ "${INSTALL_MODE}" == "airgap" ]]; then
     if [[ ! -f "${CHARTS_DIR}/index.yaml" ]]; then
       if command -v helm &>/dev/null; then
         helm repo index "$(to_native_path "${CHARTS_DIR}")" 2>/dev/null || true
+        sed -i -E '/^[[:space:]]*(created|generated):/d' "${CHARTS_DIR}/index.yaml" 2>/dev/null || true
       fi
     fi
 
