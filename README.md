@@ -87,7 +87,7 @@ Each numbered directory encapsulates a specific stage of the platform bootstrap 
 
 | Directory | Purpose | Key Manifests & Scripts |
 | :--- | :--- | :--- |
-| **[`01-create-cluster`](file:///c:/Projects/My_Projects/gitops-argocd-infra/01-create-cluster/README.md)** | Local Kind Kubernetes cluster | `kind-cluster-config.yaml`, `create-cluster.sh` |
+| **[`01-create-cluster`](file:///c:/Projects/My_Projects/gitops-argocd-infra/01-create-cluster/README.md)** | Local Kind Kubernetes cluster | `kind-cluster-config.yaml`, `create-cluster.sh`, `load-images-to-kind.sh/.ps1` |
 | **[`02-traefik-controller`](file:///c:/Projects/My_Projects/gitops-argocd-infra/02-traefik-controller/README.md)** | Gateway API CRDs & Traefik v3 DaemonSet | `install-traefik-gateway-controller.sh`, `traefik-values.yaml` |
 | **[`03-cert-manager`](file:///c:/Projects/My_Projects/gitops-argocd-infra/03-cert-manager/README.md)** | cert-manager v1.21.2 & ClusterIssuer | `install-cert-manager.sh`, `cluster-issuer.yaml` |
 | **[`04-traefik-gateway`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/README.md)** | GatewayClass, Gateway listeners & TLS Certificate | `install-gatewayclass_and_gateway.yaml`, `cert/tls-generator/` |
