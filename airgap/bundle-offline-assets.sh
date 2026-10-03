@@ -106,11 +106,13 @@ if command -v helm &>/dev/null; then
   helm repo add traefik https://traefik.github.io/charts --force-update >/dev/null 2>&1 || true
   helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null 2>&1 || true
   helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ --force-update >/dev/null 2>&1 || true
+  helm repo add harbor https://helm.goharbor.io --force-update >/dev/null 2>&1 || true
   helm repo update >/dev/null 2>&1 || true
 
   helm pull traefik/traefik --version 41.6.0 -d "${CHARTS_DIR_NATIVE}"
   helm pull jetstack/cert-manager --version v1.21.2 -d "${CHARTS_DIR_NATIVE}"
   helm pull metrics-server/metrics-server --version 3.14.0 -d "${CHARTS_DIR_NATIVE}"
+  helm pull harbor/harbor --version 1.19.2 -d "${CHARTS_DIR_NATIVE}"
   helm repo index "${CHARTS_DIR_NATIVE}"
   # Standardize index.yaml by stripping dynamic timestamps to ensure reproducible Git diffs
   if [[ -f "${CHARTS_DIR}/index.yaml" ]]; then

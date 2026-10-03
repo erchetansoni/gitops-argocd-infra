@@ -77,3 +77,38 @@ images:
   - component: redis
     description: "Argo CD in-memory state and application manifest cache"
     image: public.ecr.aws/docker/library/redis:8.2.3-alpine
+
+  # ----------------------------------------------------------------------------
+  # 5. Container Registry - Harbor v2.15.2 (Step 05: 05-infra-apps/03-harbor)
+  # ----------------------------------------------------------------------------
+  - component: harbor-core
+    description: "Harbor core service (API, auth, project management, and token service)"
+    image: docker.io/goharbor/harbor-core:v2.15.2
+
+  - component: harbor-portal
+    description: "Harbor web portal frontend"
+    image: docker.io/goharbor/harbor-portal:v2.15.2
+
+  - component: harbor-jobservice
+    description: "Harbor asynchronous job and task scheduler"
+    image: docker.io/goharbor/harbor-jobservice:v2.15.2
+
+  - component: harbor-registry
+    description: "OCI / Docker distribution registry backend"
+    image: docker.io/goharbor/registry-photon:v2.15.2
+
+  - component: harbor-registryctl
+    description: "Harbor registry controller for garbage collection and health checks"
+    image: docker.io/goharbor/harbor-registryctl:v2.15.2
+
+  - component: harbor-database
+    description: "Harbor internal PostgreSQL metadata database"
+    image: docker.io/goharbor/harbor-db:v2.15.2
+
+  - component: harbor-redis
+    description: "Harbor internal Valkey/Redis cache and queue"
+    image: docker.io/goharbor/valkey-photon:v2.15.2
+
+  - component: harbor-trivy
+    description: "Harbor Trivy vulnerability scanner adapter"
+    image: docker.io/goharbor/trivy-adapter-photon:v2.15.2

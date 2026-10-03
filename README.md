@@ -18,7 +18,7 @@ Workload microservices and per-environment manifests live in the companion repos
 ```mermaid
 flowchart TB
     subgraph Host["🖥️ Host Machine (Browser & Workstation)"]
-        Browser["🌐 Web Browser\n(app1.chetan.local, app1.dev.chetan.local,\nargocd.chetan.local)"]
+        Browser["🌐 Web Browser & Docker CLI\n(app1.chetan.local, app1.dev.chetan.local,\nargocd.chetan.local, cr.chetan.local)"]
         HostsFile["📄 /etc/hosts or Windows hosts\n(127.0.0.1 *.chetan.local)"]
         RootCATrust["🔒 Trusted Root CA Store\n(Avgol Internal Root CA)"]
     end
@@ -41,8 +41,9 @@ flowchart TB
             TLSSecret["Secret: domain-certificate-tls-secret\n(Wildcard SANs: *.chetan.local, *.dev.chetan.local)"]
         end
 
-        subgraph PlatformLayer["🛠️ Platform & Monitoring"]
+        subgraph PlatformLayer["🛠️ Platform & Infrastructure Apps"]
             MetricsServer["Metrics Server (kube-system namespace)\n(CPU & Memory Metrics)"]
+            HarborRegistry["Harbor Registry (harbor namespace)\n(cr.chetan.local OCI Registry)"]
             ArgoCD["Argo CD Control Plane (argocd namespace)\n(App-of-Apps & ApplicationSets)"]
         end
 
@@ -67,9 +68,11 @@ flowchart TB
     Traefik --> MainGateway
     MainGateway --> TLSSecret
     MainGateway -->|HTTPRoute: argocd.chetan.local| ArgoCD
+    MainGateway -->|HTTPRoute: cr.chetan.local| HarborRegistry
 
     ArgoCD -->|Adopts & Manages| Traefik
     ArgoCD -->|Adopts & Manages| MetricsServer
+    ArgoCD -->|Adopts & Manages| HarborRegistry
     ArgoCD -->|Watches & Syncs| AppsRepo
 
     AppsRepo -.->|ApplicationSet Matrix| MainEnv
@@ -88,7 +91,7 @@ Each numbered directory encapsulates a specific stage of the platform bootstrap 
 | **[`02-traefik-controller`](file:///c:/Projects/My_Projects/gitops-argocd-infra/02-traefik-controller/README.md)** | Gateway API CRDs & Traefik v3 DaemonSet | `install-traefik-gateway-controller.sh`, `traefik-values.yaml` |
 | **[`03-cert-manager`](file:///c:/Projects/My_Projects/gitops-argocd-infra/03-cert-manager/README.md)** | cert-manager v1.21.2 & ClusterIssuer | `install-cert-manager.sh`, `cluster-issuer.yaml` |
 | **[`04-traefik-gateway`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/README.md)** | GatewayClass, Gateway listeners & TLS Certificate | `install-gatewayclass_and_gateway.yaml`, `cert/tls-generator/` |
-| **[`05-infra-apps`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/README.md)** | Platform infra apps (Traefik, Metrics Server, cert-manager) | `infra-apps-root.yaml`, `01-traefik-gateway/`, `02-metrics-server/` |
+| **[`05-infra-apps`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/README.md)** | Platform infra apps (Traefik, Metrics Server, cert-manager, Harbor) | `infra-apps-root.yaml`, `01-traefik-gateway/`, `02-metrics-server/`, `03-harbor/` |
 | **[`06-argocd`](file:///c:/Projects/My_Projects/gitops-argocd-infra/06-argocd/README.md)** | Argo CD install, ConfigMaps, HTTPRoute & adoption | `01-install-argocd.sh`, `02-adopt-infra-apps.sh`, `argocd-httproute.yaml` |
 | **[`07-apps`](file:///c:/Projects/My_Projects/gitops-argocd-infra/07-apps/README.md)** | Workload Git repo credentials & Root ApplicationSet | `01-install-repo-creds-secret.sh`, `02-install-root-app.sh`, `root-app/` |
 
@@ -217,6 +220,10 @@ curl -s -D - -H "Host: app1.dev.chetan.local" http://127.0.0.1/
 curl -k https://app1.chetan.local/
 curl -k https://app1.dev.chetan.local/
 curl -k https://argocd.chetan.local/
+curl -k https://cr.chetan.local/
+
+# Test Harbor Docker Registry CLI Login
+docker login cr.chetan.local -u admin -p Harbor12345
 ```
 
 ---
