@@ -49,6 +49,8 @@ echo "================================================================="
 echo ""
 
 ./01-create-cluster/create-cluster.sh
+./01-create-cluster/load-images-to-kind.sh --pull
+
 ./02-traefik-controller/install-traefik-gateway-controller.sh
 ./03-cert-manager/install-cert-manager.sh
 ./04-traefik-gateway/install-traefik-gatewayclass.sh
