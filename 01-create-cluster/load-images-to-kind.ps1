@@ -88,7 +88,21 @@ if ($Archive) {
     }
     $resolvedArchive = (Resolve-Path $Archive).Path
     Write-Host "[ARCHIVE] Loading container images from archive: $resolvedArchive..." -ForegroundColor Yellow
-    kind load image-archive "$resolvedArchive" --name "$ClusterName"
+    $nodes = @(kind get nodes --name "$ClusterName" 2>$null)
+    if ($nodes.Count -eq 0) { $nodes = @("$ClusterName-control-plane") }
+
+    $archiveLoaded = $false
+    try {
+        & kind load image-archive "$resolvedArchive" --name "$ClusterName" 2>$null
+        if ($LASTEXITCODE -eq 0) { $archiveLoaded = $true }
+    } catch {}
+
+    if (-not $archiveLoaded) {
+        Write-Host "   [WARN] 'kind load image-archive' failed; streaming directly via ctr..." -ForegroundColor Yellow
+        foreach ($node in $nodes) {
+            cmd /c "docker exec -i $node ctr --namespace=k8s.io images import --digests - < `"$resolvedArchive`"" > $null
+        }
+    }
     Write-Host "[OK] All images from archive successfully loaded into KinD cluster '$ClusterName'!" -ForegroundColor Green
     exit 0
 }
@@ -179,6 +193,10 @@ Write-Host ""
 Write-Host "[LOAD] Loading $($presentImages.Count) image(s) into KinD cluster '$ClusterName'..." -ForegroundColor Green
 Write-Host "Please wait (this may take 1-3 minutes depending on disk speed)..." -ForegroundColor Gray
 
+# Query cluster nodes
+$nodes = @(kind get nodes --name "$ClusterName" 2>$null)
+if ($nodes.Count -eq 0) { $nodes = @("$ClusterName-control-plane") }
+
 # Load in batches of 5
 $batchSize = 5
 for ($i = 0; $i -lt $presentImages.Count; $i += $batchSize) {
@@ -189,7 +207,19 @@ for ($i = 0; $i -lt $presentImages.Count; $i += $batchSize) {
     foreach ($b in $batch) {
         Write-Host "      - $b" -ForegroundColor Gray
     }
-    kind load docker-image @batch --name "$ClusterName"
+    $batchLoaded = $false
+    try {
+        & kind load docker-image @batch --name "$ClusterName" 2>$null
+        if ($LASTEXITCODE -eq 0) { $batchLoaded = $true }
+    } catch {}
+
+    if (-not $batchLoaded) {
+        Write-Host "      [WARN] 'kind load' failed (Docker containerd store multi-arch manifest). Streaming via direct ctr pipe..." -ForegroundColor Yellow
+        foreach ($node in $nodes) {
+            $batchStr = $batch -join " "
+            cmd /c "docker save $batchStr | docker exec -i $node ctr --namespace=k8s.io images import --digests -" > $null
+        }
+    }
 }
 
 Write-Host ""

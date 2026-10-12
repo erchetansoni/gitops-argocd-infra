@@ -135,7 +135,15 @@ if [[ -n "${ARCHIVE_PATH}" ]]; then
   fi
   echo "📦 Loading container images from archive: ${ARCHIVE_PATH}..."
   NATIVE_ARCHIVE="$(to_native_path "${ARCHIVE_PATH}")"
-  kind load image-archive "${NATIVE_ARCHIVE}" --name "${CLUSTER_NAME}"
+  if ! kind load image-archive "${NATIVE_ARCHIVE}" --name "${CLUSTER_NAME}" 2>/dev/null; then
+    echo "   ⚠️  'kind load image-archive' failed; falling back to direct ctr stream..."
+    nodes="$(kind get nodes --name "${CLUSTER_NAME}" 2>/dev/null || true)"
+    [[ -z "${nodes}" ]] && nodes="${CLUSTER_NAME}-control-plane"
+    for node in ${nodes}; do
+      echo "   📥 Streaming archive to node '${node}'..."
+      cat "${ARCHIVE_PATH}" | docker exec -i "${node}" ctr --namespace=k8s.io images import --digests - >/dev/null
+    done
+  fi
   echo "✅ All images from archive successfully loaded into KinD cluster '${CLUSTER_NAME}'!"
   exit 0
 fi
@@ -231,6 +239,10 @@ echo ""
 echo "🚀 Loading ${#present_images[@]} image(s) into KinD cluster '${CLUSTER_NAME}'..."
 echo "⏳ This may take 1-3 minutes depending on disk speed..."
 
+# Query KinD cluster nodes once
+nodes="$(kind get nodes --name "${CLUSTER_NAME}" 2>/dev/null || true)"
+[[ -z "${nodes}" ]] && nodes="${CLUSTER_NAME}-control-plane"
+
 # Load images in batches to prevent command line length issues while maintaining speed
 batch_size=5
 total=${#present_images[@]}
@@ -240,7 +252,12 @@ for ((i=0; i<total; i+=batch_size)); do
   for b in "${batch[@]}"; do
     echo "      • $b"
   done
-  kind load docker-image "${batch[@]}" --name "${CLUSTER_NAME}"
+  if ! kind load docker-image "${batch[@]}" --name "${CLUSTER_NAME}" 2>/dev/null; then
+    echo "      ℹ️  'kind load' failed (Docker containerd store multi-arch manifest). Streaming via direct ctr pipe..."
+    for node in ${nodes}; do
+      docker save "${batch[@]}" | docker exec -i "${node}" ctr --namespace=k8s.io images import --digests - >/dev/null
+    done
+  fi
 done
 
 echo ""
