@@ -182,3 +182,99 @@ items:
           - ServerSideApply=true
           - RespectIgnoreDifferences=true
 
+  # 4. Harbor Container Registry
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: harbor
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "2"
+    spec:
+      project: default
+      source:
+        repoURL: https://helm.goharbor.io
+        chart: harbor
+        targetRevision: 1.19.2
+        helm:
+          valuesObject:
+            expose:
+              type: route
+              tls:
+                enabled: false
+              route:
+                parentRefs:
+                  - name: main-gateway
+                    namespace: default
+                hosts:
+                  - cr.chetan.local
+            externalURL: https://cr.chetan.local
+            harborAdminPassword: "Harbor12345"
+            persistence:
+              enabled: true
+              resourcePolicy: keep
+              persistentVolumeClaim:
+                registry:
+                  size: 10Gi
+                jobservice:
+                  jobLog:
+                    size: 1Gi
+                database:
+                  size: 1Gi
+                redis:
+                  size: 1Gi
+                trivy:
+                  size: 5Gi
+            ipFamily:
+              ipv6:
+                enabled: false
+            portal:
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+            core:
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+            jobservice:
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+            registry:
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+            database:
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+            redis:
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+            trivy:
+              enabled: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: harbor
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+

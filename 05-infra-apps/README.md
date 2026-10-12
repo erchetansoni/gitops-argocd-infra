@@ -43,6 +43,16 @@ All platform components are declared in [infra-apps-root.yaml](infra-apps-root.y
   * Gateway API support enabled (`extraArgs: [--enable-gateway-api]`).
   * ServerSideApply enabled in Argo CD sync options for clean CRD synchronization.
 
+### 4. Harbor Container Registry (`03-harbor/`)
+* **Argo CD Application Name**: `harbor`
+* **Helm Chart**: `harbor` (`v1.19.2`, app `v2.15.2`) from `https://helm.goharbor.io`
+* **Namespace**: `harbor`
+* **Host / Subdomain**: `cr.chetan.local`
+* **Configuration Highlights**:
+  * Gateway API HTTPRoute (`harbor-route`) attached to `main-gateway`.
+  * TLS terminated at Gateway using `*.chetan.local` wildcard certificate.
+  * Includes Core, Portal, Registry, Jobservice, Database (PostgreSQL), Redis/Valkey, and Trivy scanner.
+
 ---
 
 ## File Structure
@@ -56,6 +66,11 @@ All platform components are declared in [infra-apps-root.yaml](infra-apps-root.y
 │   ├── install-metrics-server.sh       # Pre-install script (used before Argo CD)
 │   ├── metrics-server-application.yaml # Individual Argo CD Application manifest
 │   └── metrics-server-values.yaml      # Metrics Server Helm values
+├── 03-harbor/
+│   ├── harbor-application.yaml         # Individual Argo CD Application manifest
+│   ├── harbor-values.yaml              # Harbor Helm values (Gateway API HTTPRoute)
+│   ├── install-harbor.sh               # Pre-install / standalone install script
+│   └── README.md                       # Documentation & Docker push/pull guide
 ├── infra-apps-root.yaml                # Root Application manifest containing infra apps
 └── README.md                           # Documentation
 ```
@@ -77,7 +92,7 @@ Instead of manual `helm install` commands drifting over time, the script [06-arg
 Check the Argo CD status of infra apps:
 
 ```bash
-kubectl get applications -n argocd traefik-gateway-controller metrics-server cert-manager
+kubectl get applications -n argocd traefik-gateway-controller metrics-server cert-manager harbor
 ```
 
 Verify that Metrics Server is working:
