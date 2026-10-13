@@ -1,0 +1,82 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  project: default
+  source:
+    repoURL: code.forgejo.org/forgejo-helm
+    chart: forgejo
+    targetRevision: 17.2.0
+    helm:
+      valuesObject:
+        image:
+          registry: code.forgejo.org
+          repository: forgejo/forgejo
+          tag: "15.0.10"
+          rootless: true
+        httpRoute:
+          enabled: true
+          terminate: true
+          parentRefs:
+            - name: main-gateway
+              namespace: default
+          hostnames:
+            - git.chetan.local
+          matches:
+            path:
+              type: PathPrefix
+              value: /
+        gitea:
+          admin:
+            username: forgejo_admin
+            password: "Forgejo12345"
+            email: "admin@chetan.local"
+            passwordMode: keepUpdated
+          config:
+            APP_NAME: "Forgejo Git Service"
+            RUN_MODE: prod
+            server:
+              DOMAIN: git.chetan.local
+              ROOT_URL: https://git.chetan.local/
+              SSH_DOMAIN: git.chetan.local
+              SSH_PORT: 22
+              SSH_LISTEN_PORT: 2222
+              START_SSH_SERVER: true
+            actions:
+              ENABLED: true
+              DEFAULT_ACTIONS_URL: https://data.forgejo.org
+            repository:
+              DEFAULT_BRANCH: main
+              ENABLE_PUSH_CREATE_USER: true
+              ENABLE_PUSH_CREATE_ORG: true
+            security:
+              INSTALL_LOCK: true
+        persistence:
+          enabled: true
+          claimName: forgejo-data
+          size: 10Gi
+          accessModes:
+            - ReadWriteOnce
+          annotations:
+            helm.sh/resource-policy: keep
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            memory: 1Gi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgejo
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true

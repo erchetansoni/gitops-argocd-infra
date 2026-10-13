@@ -18,7 +18,7 @@ Workload microservices and per-environment manifests live in the companion repos
 ```mermaid
 flowchart TB
     subgraph Host["🖥️ Host Machine (Browser & Workstation)"]
-        Browser["🌐 Web Browser & Docker CLI\n(app1.chetan.local, app1.dev.chetan.local,\nargocd.chetan.local, cr.chetan.local)"]
+        Browser["🌐 Web Browser & Docker CLI\n(app1.chetan.local, app1.dev.chetan.local,\nargocd.chetan.local, cr.chetan.local, git.chetan.local)"]
         HostsFile["📄 /etc/hosts or Windows hosts\n(127.0.0.1 *.chetan.local)"]
         RootCATrust["🔒 Trusted Root CA Store\n(Avgol Internal Root CA)"]
     end
@@ -44,6 +44,8 @@ flowchart TB
         subgraph PlatformLayer["🛠️ Platform & Infrastructure Apps"]
             MetricsServer["Metrics Server (kube-system namespace)\n(CPU & Memory Metrics)"]
             HarborRegistry["Harbor Registry (harbor namespace)\n(cr.chetan.local OCI Registry)"]
+            ForgejoService["Forgejo Git Service (forgejo namespace)\n(git.chetan.local Git & Actions)"]
+            ForgejoRunner["Forgejo Actions Runner (forgejo-runner)\n(DinD CI/CD Runner)"]
             ArgoCD["Argo CD Control Plane (argocd namespace)\n(App-of-Apps & ApplicationSets)"]
         end
 
@@ -69,10 +71,14 @@ flowchart TB
     MainGateway --> TLSSecret
     MainGateway -->|HTTPRoute: argocd.chetan.local| ArgoCD
     MainGateway -->|HTTPRoute: cr.chetan.local| HarborRegistry
+    MainGateway -->|HTTPRoute: git.chetan.local| ForgejoService
+    ForgejoRunner -.->|Polls & Executes| ForgejoService
 
     ArgoCD -->|Adopts & Manages| Traefik
     ArgoCD -->|Adopts & Manages| MetricsServer
     ArgoCD -->|Adopts & Manages| HarborRegistry
+    ArgoCD -->|Adopts & Manages| ForgejoService
+    ArgoCD -->|Adopts & Manages| ForgejoRunner
     ArgoCD -->|Watches & Syncs| AppsRepo
 
     AppsRepo -.->|ApplicationSet Matrix| MainEnv
@@ -180,6 +186,8 @@ Add the following mappings to your local hosts file:
 
 ```text
 127.0.0.1 argocd.chetan.local
+127.0.0.1 cr.chetan.local
+127.0.0.1 git.chetan.local
 127.0.0.1 app1.chetan.local
 127.0.0.1 app2.chetan.local
 127.0.0.1 app3.chetan.local
@@ -221,9 +229,13 @@ curl -k https://app1.chetan.local/
 curl -k https://app1.dev.chetan.local/
 curl -k https://argocd.chetan.local/
 curl -k https://cr.chetan.local/
+curl -k https://git.chetan.local/
 
 # Test Harbor Docker Registry CLI Login
 docker login cr.chetan.local -u admin -p Harbor12345
+
+# Test Forgejo Git HTTP Clone
+git clone https://admin:Forgejo12345@git.chetan.local/admin/test-repo.git
 ```
 
 ---

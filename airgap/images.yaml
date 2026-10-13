@@ -112,3 +112,25 @@ images:
   - component: harbor-trivy
     description: "Harbor Trivy vulnerability scanner adapter"
     image: docker.io/goharbor/trivy-adapter-photon:v2.15.2
+
+  # ----------------------------------------------------------------------------
+  # 6. Git Service - Forgejo v15.0.10 (Step 05: 05-infra-apps/04-forgejo)
+  # ----------------------------------------------------------------------------
+  - component: forgejo
+    description: "Forgejo Git Service server (rootless image)"
+    image: code.forgejo.org/forgejo/forgejo:15.0.10-rootless
+
+  # ----------------------------------------------------------------------------
+  # 7. CI/CD Runner - Forgejo Runner v12.7.3 (Step 05: 05-infra-apps/05-forgejo-runner)
+  # ----------------------------------------------------------------------------
+  - component: forgejo-runner
+    description: "Forgejo Actions Runner daemon"
+    image: code.forgejo.org/forgejo/runner:12.7.3
+
+  - component: forgejo-runner-dind
+    description: "Docker-in-Docker daemon sidecar for workflow container jobs"
+    image: docker.io/library/docker:29.3.1-dind
+
+  - component: forgejo-runner-kubectl
+    description: "Kubectl helper image for runner hook jobs"
+    image: docker.io/alpine/kubectl:1.35.3

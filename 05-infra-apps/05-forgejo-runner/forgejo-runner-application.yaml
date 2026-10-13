@@ -1,0 +1,76 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo-runner
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+spec:
+  project: default
+  source:
+    repoURL: codeberg.org/wrenix/helm-charts
+    chart: forgejo-runner
+    targetRevision: 0.7.6
+    helm:
+      valuesObject:
+        knownLastVersion: true
+        replicaCount: 1
+        image:
+          registry: code.forgejo.org
+          repository: forgejo/runner
+          tag: "12.7.3"
+          pullPolicy: IfNotPresent
+        runner:
+          config:
+            create: true
+            existingInitSecret: "forgejo-runner-secret"
+            instance: "http://forgejo-http.forgejo.svc.cluster.local:3000"
+            name: "k8s-runner"
+            file:
+              log:
+                level: "info"
+                job_level: "info"
+              runner:
+                file: ".runner"
+                capacity: 2
+                timeout: 3h
+                insecure: true
+                fetch_timeout: 5s
+                fetch_interval: 2s
+                labels:
+                  - "ubuntu-latest:docker://node:18-bullseye"
+                  - "ubuntu-22.04:docker://node:18-bullseye"
+                  - "docker:docker://docker:dind"
+              container:
+                privileged: true
+                options: "--add-host=git.chetan.local:host-gateway"
+                workdir_parent: /workspace
+                valid_volumes:
+                  - "**"
+        dind:
+          image:
+            registry: docker.io
+            repository: library/docker
+            tag: "29.3.1-dind"
+            pullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgejo-runner
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - RespectIgnoreDifferences=true

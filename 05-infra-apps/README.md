@@ -53,6 +53,26 @@ All platform components are declared in [infra-apps-root.yaml](infra-apps-root.y
   * TLS terminated at Gateway using `*.chetan.local` wildcard certificate.
   * Includes Core, Portal, Registry, Jobservice, Database (PostgreSQL), Redis/Valkey, and Trivy scanner.
 
+### 5. Forgejo Git Service (`04-forgejo/`)
+* **Argo CD Application Name**: `forgejo`
+* **Helm Chart**: `forgejo` (`v17.2.0`, app `v15.0.9`) from `oci://code.forgejo.org/forgejo-helm/forgejo`
+* **Namespace**: `forgejo`
+* **Host / Subdomain**: `git.chetan.local`
+* **Configuration Highlights**:
+  * Gateway API HTTPRoute (`forgejo`) attached to `main-gateway`.
+  * TLS terminated at Gateway using `*.chetan.local` wildcard certificate.
+  * Built-in Forgejo Actions enabled for native in-cluster CI/CD workflows.
+  * Persistent storage for repositories and SQLite database.
+
+### 6. Forgejo Actions Runner (`05-forgejo-runner/`)
+* **Argo CD Application Name**: `forgejo-runner`
+* **Helm Chart**: `forgejo-runner` (`v0.7.6`, app `v12.7.3`) from `oci://codeberg.org/wrenix/helm-charts/forgejo-runner`
+* **Namespace**: `forgejo-runner`
+* **Configuration Highlights**:
+  * Docker-in-Docker (DinD) sidecar architecture (`docker:29.3.1-dind`).
+  * Connects internally to Forgejo via cluster service `http://forgejo-http.forgejo.svc.cluster.local:3000`.
+  * Synchronized via Argo CD sync-wave `3` after Forgejo (sync-wave `2`) is running.
+
 ---
 
 ## File Structure
@@ -71,6 +91,16 @@ All platform components are declared in [infra-apps-root.yaml](infra-apps-root.y
 │   ├── harbor-values.yaml              # Harbor Helm values (Gateway API HTTPRoute)
 │   ├── install-harbor.sh               # Pre-install / standalone install script
 │   └── README.md                       # Documentation & Docker push/pull guide
+├── 04-forgejo/
+│   ├── forgejo-application.yaml        # Individual Argo CD Application manifest
+│   ├── forgejo-values.yaml             # Forgejo Helm values (Gateway API HTTPRoute)
+│   ├── install-forgejo.sh              # Pre-install / standalone install script
+│   └── README.md                       # Documentation & Git clone guide
+├── 05-forgejo-runner/
+│   ├── forgejo-runner-application.yaml # Individual Argo CD Application manifest
+│   ├── forgejo-runner-values.yaml      # Forgejo Runner Helm values (DinD sidecar)
+│   ├── install-forgejo-runner.sh       # Pre-install / standalone install script
+│   └── README.md                       # Documentation & Actions runner guide
 ├── infra-apps-root.yaml                # Root Application manifest containing infra apps
 └── README.md                           # Documentation
 ```
