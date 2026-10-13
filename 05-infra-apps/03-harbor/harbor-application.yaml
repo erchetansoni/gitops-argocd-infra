@@ -25,10 +25,14 @@ spec:
               - cr.chetan.local
         externalURL: https://cr.chetan.local
         harborAdminPassword: Harbor12345
+        # The secret key used for encryption in PostgreSQL. MUST be exactly 16 characters.
+        secretKey: HarborSecret1234
         persistence:
           enabled: true
           resourcePolicy: keep
           persistentVolumeClaim:
+            # --- Registry PVC (Active: local filesystem storage) ---
+            # NOTE: When switching to Object Storage below, comment out or remove this registry block.
             registry:
               size: 10Gi
             jobservice:
@@ -40,6 +44,50 @@ spec:
               size: 1Gi
             trivy:
               size: 5Gi
+
+          # ============================================================================
+          # OBJECT STORAGE OPTIONS (Uncomment ONE block below to move to object storage)
+          # When enabling any object storage, comment out 'registry: size: 10Gi' above.
+          # ============================================================================
+
+          # --- Option 1: RustFS / MinIO / S3-Compatible Object Storage (Remote Server over HTTPS) ---
+          # imageChartStorage:
+          #   disableredirect: true
+          #   type: s3
+          #   s3:
+          #     region: us-east-1
+          #     regionendpoint: "https://rustfs.chetan.local"   # or "http://rustfs.default.svc.cluster.local:9000"
+          #     bucket: "harbor-registry"
+          #     accesskey: "YOUR_ACCESS_KEY"
+          #     secretkey: "YOUR_SECRET_KEY"
+          #     secure: true
+          #     skipverify: true
+          #     v4auth: true
+          #     rootdirectory: "/"
+
+          # --- Option 2: AWS S3 ---
+          # imageChartStorage:
+          #   disableredirect: false
+          #   type: s3
+          #   s3:
+          #     region: "us-east-1"
+          #     bucket: "my-harbor-registry-bucket"
+          #     accesskey: "YOUR_AWS_ACCESS_KEY"
+          #     secretkey: "YOUR_AWS_SECRET_KEY"
+          #     secure: true
+          #     v4auth: true
+          #     rootdirectory: "/"
+
+          # --- Option 3: Azure Blob Storage ---
+          # imageChartStorage:
+          #   disableredirect: false
+          #   type: azure
+          #   azure:
+          #     accountname: "myazurestorageaccount"
+          #     accountkey: "YOUR_AZURE_STORAGE_ACCOUNT_KEY"
+          #     container: "harbor-registry"
+          #     realm: "core.windows.net"
+          #     storagePrefix: ""
         ipFamily:
           ipv6:
             enabled: false
