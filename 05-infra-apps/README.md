@@ -95,6 +95,7 @@ All platform components are declared in [infra-apps-root.yaml](infra-apps-root.y
 │   ├── forgejo-application.yaml        # Individual Argo CD Application manifest
 │   ├── forgejo-values.yaml             # Forgejo Helm values (Gateway API HTTPRoute)
 │   ├── install-forgejo.sh              # Pre-install / standalone install script
+│   ├── sync-repo-to-forgejo.sh         # Seeds gitops-argocd-infra repo and configures dual-remote
 │   └── README.md                       # Documentation & Git clone guide
 ├── 05-forgejo-runner/
 │   ├── forgejo-runner-application.yaml # Individual Argo CD Application manifest
@@ -122,7 +123,14 @@ Instead of manual `helm install` commands drifting over time, the script [06-arg
 Check the Argo CD status of infra apps:
 
 ```bash
-kubectl get applications -n argocd traefik-gateway-controller metrics-server cert-manager harbor
+kubectl get applications -n argocd
+# Output:
+# traefik-gateway-controller   Synced   Healthy
+# metrics-server               Synced   Healthy
+# cert-manager                 Synced   Healthy
+# harbor                       Synced   Healthy
+# forgejo                      Synced   Healthy
+# forgejo-runner               Synced   Healthy
 ```
 
 Verify that Metrics Server is working:

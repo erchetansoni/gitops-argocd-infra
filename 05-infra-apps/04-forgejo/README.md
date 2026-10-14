@@ -42,7 +42,47 @@ To install Forgejo directly using Helm:
 ./05-infra-apps/04-forgejo/install-forgejo.sh
 ```
 
-The script automatically detects if an offline chart package (`airgap/charts/forgejo-17.2.0.tgz`) exists and uses it, or pulls from `oci://code.forgejo.org/forgejo-helm/forgejo` when online.
+The script automatically detects if an offline chart package (`airgap/charts/forgejo-17.2.0.tgz`) exists and uses it, or pulls from `oci://code.forgejo.org/forgejo-helm/forgejo` when online. It also polls `https://git.chetan.local/api/v1/version` to guarantee the API is fully healthy before reporting success.
+
+---
+
+## 🔄 Seeding the GitOps Repository (`sync-repo-to-forgejo.sh`)
+
+Once Forgejo is healthy, run the repo sync script to publish this platform infrastructure repository into Forgejo:
+
+```bash
+./05-infra-apps/04-forgejo/sync-repo-to-forgejo.sh
+```
+
+### What this script automates:
+1. **Health Verification**: Confirms the Forgejo REST API is responding at `https://git.chetan.local/api/v1/version`.
+2. **Repository Creation**: Queries `/api/v1/repos/forgejo_admin/gitops-argocd-infra`. If not present, creates it via `POST /api/v1/user/repos` (with `auto_init: false`).
+3. **Dual-Remote Git Configuration**: Configures Git on your workstation so both GitHub and Forgejo are active remotes:
+   * **`origin`**: Preserved untouched pointing to GitHub (for cloud backup & team collaboration).
+   * **`forgejo`**: Added pointing to `https://forgejo_admin:Forgejo12345@git.chetan.local/forgejo_admin/gitops-argocd-infra.git`.
+4. **SSL Bypass for Local Domain**: Automatically configures `git config http.https://git.chetan.local/.sslVerify false` so Git CLI push/fetch operations work seamlessly with the local self-signed CA.
+5. **Branch Synchronization**: Pushes the current active working branch directly to Forgejo, and mirrors it into Forgejo's `main` branch.
+
+### Daily Dual-Remote Workflow
+
+```bash
+# Push to in-cluster Forgejo (triggers local Argo CD sync instantly, works offline):
+git push forgejo main
+
+# Push to GitHub (cloud backup / PR review):
+git push origin main
+```
+
+---
+
+## 🌐 Network Endpoints: External vs. Internal
+
+Forgejo serves Git repositories across two network boundaries:
+
+| Context | URL | Use Case |
+| :--- | :--- | :--- |
+| **External (Host Workstation & Browser)** | `https://git.chetan.local/forgejo_admin/gitops-argocd-infra.git` | Browser web UI, local developer `git push/pull` over HTTPS via Traefik Gateway |
+| **Internal (In-Cluster Kubernetes Services)** | `http://forgejo-http.forgejo.svc.cluster.local:3000/forgejo_admin/gitops-argocd-infra.git` | Argo CD repo-server and Forgejo Actions Runner polling and cloning without hairpin DNS or TLS overhead |
 
 ---
 
@@ -57,6 +97,12 @@ Verify Argo CD application status:
 kubectl get application forgejo -n argocd
 ```
 
+To configure Argo CD to authenticate with and sync from Forgejo, run:
+
+```bash
+./06-argocd/03-configure-forgejo-repo.sh
+```
+
 ---
 
 ## Generating Runner Tokens for CI/CD
@@ -68,3 +114,4 @@ kubectl exec -n forgejo deployment/forgejo -c forgejo -- forgejo actions generat
 ```
 
 This token is used by [05-forgejo-runner](../05-forgejo-runner/README.md) to register the runner automatically.
+

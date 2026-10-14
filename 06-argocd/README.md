@@ -17,11 +17,12 @@ Argo CD automates the deployment of the desired application states declared in G
 
 ```
 06-argocd/
-├── 01-install-argocd.sh         # Installs Argo CD, applies configs, and prints admin password
-├── 02-adopt-infra-apps.sh       # Adopts Traefik, Metrics Server, and cert-manager into Argo CD management
-├── argocd-configmaps.yaml       # ConfigMaps: argocd-cm and argocd-cmd-params-cm
-├── argocd-httproute.yaml        # Gateway API HTTPRoute for argocd.chetan.local
-└── README.md                    # Documentation
+├── 01-install-argocd.sh           # Installs Argo CD, applies configs, and prints admin password
+├── 02-adopt-infra-apps.sh         # Adopts Traefik, Metrics Server, cert-manager, Harbor, and Forgejo
+├── 03-configure-forgejo-repo.sh   # Configures in-cluster Forgejo repo secret in Argo CD
+├── argocd-configmaps.yaml         # ConfigMaps: argocd-cm and argocd-cmd-params-cm
+├── argocd-httproute.yaml          # Gateway API HTTPRoute for argocd.chetan.local
+└── README.md                      # Documentation
 ```
 
 ---
@@ -74,7 +75,14 @@ This will:
 ```bash
 bash 06-argocd/02-adopt-infra-apps.sh
 ```
-Takes pre-installed infrastructure applications (Traefik, Metrics Server, and cert-manager) and brings them under Argo CD GitOps management without terminating running pods.
+Takes pre-installed infrastructure applications (Traefik, Metrics Server, cert-manager, Harbor, Forgejo, and Forgejo Runner) and brings them under Argo CD GitOps management without terminating running pods.
+
+### Step 3: Configure In-Cluster Forgejo Repository Credentials
+```bash
+bash 06-argocd/03-configure-forgejo-repo.sh
+```
+Creates `Secret/forgejo-infra-repo-secret` labeled `argocd.argoproj.io/secret-type: repository`. Argo CD can now directly access `http://forgejo-http.forgejo.svc.cluster.local:3000/forgejo_admin/gitops-argocd-infra.git` for ultra-fast, offline, in-cluster GitOps synchronization.
+
 
 ---
 

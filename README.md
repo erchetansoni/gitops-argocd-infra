@@ -97,8 +97,8 @@ Each numbered directory encapsulates a specific stage of the platform bootstrap 
 | **[`02-traefik-controller`](file:///c:/Projects/My_Projects/gitops-argocd-infra/02-traefik-controller/README.md)** | Gateway API CRDs & Traefik v3 DaemonSet | `install-traefik-gateway-controller.sh`, `traefik-values.yaml` |
 | **[`03-cert-manager`](file:///c:/Projects/My_Projects/gitops-argocd-infra/03-cert-manager/README.md)** | cert-manager v1.21.2 & ClusterIssuer | `install-cert-manager.sh`, `cluster-issuer.yaml` |
 | **[`04-traefik-gateway`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/README.md)** | GatewayClass, Gateway listeners & TLS Certificate | `install-gatewayclass_and_gateway.yaml`, `cert/tls-generator/` |
-| **[`05-infra-apps`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/README.md)** | Platform infra apps (Traefik, Metrics Server, cert-manager, Harbor) | `infra-apps-root.yaml`, `01-traefik-gateway/`, `02-metrics-server/`, `03-harbor/` |
-| **[`06-argocd`](file:///c:/Projects/My_Projects/gitops-argocd-infra/06-argocd/README.md)** | Argo CD install, ConfigMaps, HTTPRoute & adoption | `01-install-argocd.sh`, `02-adopt-infra-apps.sh`, `argocd-httproute.yaml` |
+| **[`05-infra-apps`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/README.md)** | Platform infra apps (Metrics Server, Harbor, Forgejo, Forgejo Runner) | `infra-apps-root.yaml`, `02-metrics-server/`, `03-harbor/`, `04-forgejo/`, `05-forgejo-runner/` |
+| **[`06-argocd`](file:///c:/Projects/My_Projects/gitops-argocd-infra/06-argocd/README.md)** | Argo CD install, ConfigMaps, HTTPRoute, adoption & Forgejo repo secret | `01-install-argocd.sh`, `02-adopt-infra-apps.sh`, `03-configure-forgejo-repo.sh`, `argocd-httproute.yaml` |
 | **[`07-apps`](file:///c:/Projects/My_Projects/gitops-argocd-infra/07-apps/README.md)** | Workload Git repo credentials & Root ApplicationSet | `01-install-repo-creds-secret.sh`, `02-install-root-app.sh`, `root-app/` |
 
 ---
@@ -118,7 +118,13 @@ Before running the bootstrap scripts, ensure your workstation has:
 
 ## 🚀 End-to-End Setup Guide
 
-Follow the sequence from `01` to `07` to stand up the entire platform:
+You can run the entire platform bring-up automatically with a single command via [main.sh](file:///c:/Projects/My_Projects/gitops-argocd-infra/main.sh):
+
+```bash
+bash main.sh
+```
+
+Or execute the numbered stages sequentially:
 
 ### Step 1: Create the Kind Cluster
 ```bash
@@ -126,42 +132,76 @@ bash 01-create-cluster/create-cluster.sh
 ```
 * Provisions `gitops-demo-cluster` with ports `80` and `443` bound to your localhost.
 
-### Step 2: Install Traefik Gateway API Controller
+### Step 2: Pre-load Day-0 Platform Container Images
+```bash
+bash 01-create-cluster/load-images-to-kind.sh --pull
+```
+* Pre-loads all platform container images (Traefik, cert-manager, Metrics Server, Harbor, Forgejo, Forgejo Runner, and Argo CD) directly into the KinD node's containerd cache.
+* **Why this matters**: Eliminates image pull timeouts, allows 100% offline startup, and avoids the circular dependency of pulling Harbor from Harbor.
+
+### Step 3: Install Traefik Gateway API Controller
 ```bash
 bash 02-traefik-controller/install-traefik-gateway-controller.sh
 ```
 * Installs standard Gateway API CRDs (`v1.6.2`).
 * Deploys Traefik v3 DaemonSet with entrypoint HTTP-to-HTTPS redirect enabled.
 
-### Step 3: Install cert-manager & ClusterIssuer
+### Step 4: Install cert-manager & ClusterIssuer
 ```bash
 bash 03-cert-manager/install-cert-manager.sh
 ```
 * Deploys cert-manager `v1.21.2` with CRDs and Gateway API integration.
 * Injects Root CA into `local-root-ca-secret` and configures `ClusterIssuer/local-ca-issuer`.
 
-### Step 4: Deploy GatewayClass, Gateway & TLS Certificate
+### Step 5: Deploy GatewayClass, Gateway & TLS Certificate
 ```bash
 bash 04-traefik-gateway/install-traefik-gatewayclass.sh
 ```
 * Deploys GatewayClass `traefik` and Gateway `main-gateway`.
 * Declares `Certificate/domain-wildcard-cert`, which cert-manager automatically signs and populates into `domain-certificate-tls-secret`.
 
-### Step 5: Install Metrics Server
+### Step 6: Install Metrics Server
 ```bash
 bash 05-infra-apps/02-metrics-server/install-metrics-server.sh
 ```
 * Installs Metrics Server for cluster resource metrics (`kubectl top nodes`, `kubectl top pods`).
 
-### Step 6: Install Argo CD & Expose UI
+### Step 7: Install Harbor Container Registry
+```bash
+bash 05-infra-apps/03-harbor/install-harbor.sh
+```
+* Deploys Harbor Registry, PostgreSQL, Valkey/Redis, Jobservice, Portal, and Trivy.
+* Exposes UI and registry API at `https://cr.chetan.local`.
+* Automatically verifies API health status via `https://cr.chetan.local/api/v2.0/health`.
+
+### Step 8: Install Forgejo Git Service & Seed GitOps Repository
+```bash
+bash 05-infra-apps/04-forgejo/install-forgejo.sh
+bash 05-infra-apps/04-forgejo/sync-repo-to-forgejo.sh
+```
+* Deploys Forgejo Git service at `https://git.chetan.local`.
+* Confirms API health at `/api/v1/version`.
+* Automatically creates `forgejo_admin/gitops-argocd-infra` repository.
+* Configures dual-remote Git (`origin` = GitHub, `forgejo` = in-cluster) and pushes the active working branch.
+
+### Step 9: Install Forgejo Actions Runner
+```bash
+bash 05-infra-apps/05-forgejo-runner/install-forgejo-runner.sh
+```
+* Deploys the Forgejo Actions runner with Docker-in-Docker (DinD) sidecar.
+* Connects internally to Forgejo for native in-cluster CI/CD pipelines.
+
+### Step 10: Install Argo CD, Adopt Platform Apps & Configure Repo
 ```bash
 bash 06-argocd/01-install-argocd.sh
 bash 06-argocd/02-adopt-infra-apps.sh
+bash 06-argocd/03-configure-forgejo-repo.sh
 ```
 * Installs Argo CD in `argocd` namespace and exposes UI via `https://argocd.chetan.local`.
-* Adopts Traefik, Metrics Server, and cert-manager into declarative GitOps control.
+* Adopts all 6 platform applications (`traefik`, `metrics-server`, `cert-manager`, `harbor`, `forgejo`, `forgejo-runner`) into declarative GitOps control.
+* Configures `Secret/forgejo-infra-repo-secret` for in-cluster GitOps synchronization via `http://forgejo-http.forgejo.svc.cluster.local:3000/...`.
 
-### Step 7: Connect Workload Repo & Deploy ApplicationSet
+### Step 11: Connect Workload Repo & Deploy ApplicationSet
 ```bash
 # 1. Configure GitHub token in .env:
 cp 07-apps/.env.example 07-apps/.env
@@ -175,6 +215,39 @@ bash 07-apps/02-install-root-app.sh
 ```
 * Argo CD connects to `https://github.com/erchetansoni/gitops-argocd-apps.git`.
 * Discovers all environment folders (`environments/main`, `environments/dev`) and deploys all application microservices automatically.
+
+---
+
+## 🔄 Dual-Remote GitOps Workflow (`origin` vs `forgejo`)
+
+A key advantage of this architecture is that your local workstation repository is linked to **both** your remote GitHub repository and your in-cluster Forgejo service simultaneously:
+
+```text
+ workstation (git commit)
+        │
+        ├──► git push origin main   ──► GitHub (Cloud backup, PR review, team sharing)
+        │
+        └──► git push forgejo main  ──► In-Cluster Forgejo (Instant local Argo CD sync, 0 latency, offline)
+```
+
+* **Zero GitHub Rate Limiting**: Argo CD polls in-cluster Forgejo every 3 minutes with zero risk of hitting GitHub API rate-limits or PAT token expiration.
+* **100% Offline / Air-Gap Operation**: Even if your external Internet goes down, local commits pushed to `forgejo` immediately trigger Argo CD reconciliations.
+* **Inspect remotes at any time**:
+  ```bash
+  git remote -v
+  ```
+
+---
+
+## 🐳 Day-0 Platform Bootstrap vs Day-1/Day-2 Container Image Architecture
+
+To avoid the common architectural trap ("chicken-and-egg") where Kubernetes cannot start a local registry because it needs the registry to pull the registry image:
+
+| Stage | Responsibility | Mechanism |
+| :--- | :--- | :--- |
+| **Day 0 (Platform Bootstrap)** | Core infrastructure pods (Traefik, cert-manager, Metrics Server, Harbor, Forgejo, Argo CD) | Pre-loaded into KinD node containerd runtime via `load-images-to-kind.sh` with `imagePullPolicy: IfNotPresent` |
+| **Day 1 / Day 2 (Workloads & CI/CD)** | Application microservices, custom container builds, and Helm charts | Pushed to and served by **Harbor** (`cr.chetan.local`) |
+
 
 ---
 

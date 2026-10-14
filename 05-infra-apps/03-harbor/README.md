@@ -42,6 +42,29 @@ To install Harbor directly with Helm:
 
 The script automatically detects if an offline chart package (`airgap/charts/harbor-1.19.2.tgz`) exists and uses it, or pulls from `https://helm.goharbor.io` if online.
 
+### Automated Health Verification
+After rolling out the deployments, the installation script automatically polls the Harbor health endpoint:
+```bash
+curl -k https://cr.chetan.local/api/v2.0/health
+```
+It confirms all 8 core services (`core`, `database`, `jobservice`, `portal`, `redis`, `registry`, `registryctl`, `trivy`) report `"status": "healthy"` before completing.
+
+---
+
+## 🏗️ Architectural Boundary: Day-0 vs. Day-1/Day-2 Image Strategy
+
+A common question when designing an air-gapped or local platform is: **"Should Harbor host the images used to deploy Harbor itself?"**
+
+* **Day-0 (Platform Bootstrap)**:
+  * Platform components (Traefik, cert-manager, Harbor, Forgejo, Argo CD) are pre-loaded directly into the KinD node runtime via [load-images-to-kind.sh](../../01-create-cluster/load-images-to-kind.sh).
+  * This avoids a circular dependency ("chicken-and-egg"): Kubernetes cannot pull Harbor container images from Harbor if Harbor is not already running!
+* **Day-1 & Day-2 (Application Workloads & CI/CD)**:
+  * Once Harbor is healthy, it serves as the central OCI registry for:
+    * Microservices built by CI/CD workflows (Forgejo Actions).
+    * Development team container image storage.
+    * In-cluster Helm chart and OCI artifact hosting.
+
+
 ---
 
 ## Argo CD GitOps Management
