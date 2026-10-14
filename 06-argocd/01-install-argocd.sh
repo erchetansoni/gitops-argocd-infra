@@ -174,4 +174,6 @@ if kubectl get secret "${ARGOCD_INITIAL_ADMIN_SECRET}" -n "${ARGOCD_NAMESPACE}" 
 else
   echo "   (Initial admin secret '${ARGOCD_INITIAL_ADMIN_SECRET}' not found. It may have already been rotated.)"
 fi
+echo ""
+echo "💡 Tip: Run ./print-summary.sh anytime to view all platform credentials & URLs."
 echo "================================================================="

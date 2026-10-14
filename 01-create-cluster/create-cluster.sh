@@ -34,6 +34,12 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
   exit 1
 fi
 
+CLUSTER_NAME="${CLUSTER_NAME:-gitops-demo-cluster}"
+if kind get clusters 2>/dev/null | grep -wq "${CLUSTER_NAME}"; then
+  echo "✅ Kind cluster '${CLUSTER_NAME}' is already created and running. Skipping creation."
+  exit 0
+fi
+
 ########## 🚀 Creating Kind Local Cluster ###########################
 K8S_VERSION=$(grep 'image:' "${CONFIG_FILE}" | head -n 1 | awk -F':' '{print $NF}')
 echo "🚀 The Kind cluster will be created with Kubernetes version ${K8S_VERSION}"
