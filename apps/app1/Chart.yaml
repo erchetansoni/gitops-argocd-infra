@@ -1,6 +1,0 @@
-apiVersion: v2
-name: app1
-description: Production-style Helm chart for app1 with ConfigMaps and AWS Secrets Manager via ESO.
-type: application
-version: 0.1.0
-appVersion: latest

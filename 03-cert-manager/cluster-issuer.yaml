@@ -1,0 +1,56 @@
+# ============================================================
+# cert-manager ClusterIssuers
+# ============================================================
+
+# 1. Local Root CA ClusterIssuer (Active)
+# Signs certificates using the internal Root CA secret in cert-manager namespace
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: local-ca-issuer
+spec:
+  ca:
+    secretName: local-root-ca-secret
+
+---
+# ============================================================
+# 2. Self-Signed ClusterIssuer (Reference / Alternative)
+# ============================================================
+# Use this when you do not have an external CA and want
+# cert-manager to generate its own self-signed CA in-cluster:
+#
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: selfsigned-root-issuer
+# spec:
+#   selfSigned: {}
+#
+# ---
+# # Generate a Root CA certificate using the self-signed issuer:
+# apiVersion: cert-manager.io/v1
+# kind: Certificate
+# metadata:
+#   name: selfsigned-ca-certificate
+#   namespace: cert-manager
+# spec:
+#   isCA: true
+#   commonName: "Cluster Internal Root CA"
+#   secretName: selfsigned-ca-secret
+#   privateKey:
+#     algorithm: ECDSA
+#     size: 256
+#   issuerRef:
+#     name: selfsigned-root-issuer
+#     kind: ClusterIssuer
+#     group: cert-manager.io
+#
+# ---
+# # Use that generated CA to sign application certificates:
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: selfsigned-ca-issuer
+# spec:
+#   ca:
+#     secretName: selfsigned-ca-secret

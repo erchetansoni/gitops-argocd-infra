@@ -1,0 +1,441 @@
+apiVersion: v1
+kind: List
+metadata:
+  name: infra-apps-root
+items:
+  # 1. Traefik Gateway Controller
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: traefik-gateway-controller
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: default
+      source:
+        repoURL: https://traefik.github.io/charts
+        chart: traefik
+        targetRevision: 41.6.0
+        helm:
+          releaseName: traefik
+          skipCrds: true
+          valuesObject:
+            deployment:
+              enabled: true
+              kind: DaemonSet
+            updateStrategy:
+              type: RollingUpdate
+              rollingUpdate:
+                maxUnavailable: 1
+                maxSurge: 0
+            service:
+              enabled: true
+              spec:
+                type: ClusterIP
+            hostNetwork: false
+            ports:
+              web:
+                port: 80
+                containerPort: 80
+                hostPort: 80
+                exposedPort: 80
+                protocol: TCP
+                http:
+                  redirections:
+                    entryPoint:
+                      to: websecure
+                      scheme: https
+                      permanent: true
+              websecure:
+                port: 443
+                containerPort: 443
+                hostPort: 443
+                exposedPort: 443
+                protocol: TCP
+                http:
+                  tls:
+                    enabled: true
+            providers:
+              kubernetesGateway:
+                enabled: true
+              kubernetesCRD:
+                enabled: false
+              kubernetesIngress:
+                enabled: false
+            gateway:
+              enabled: false
+              installCRDs: false
+            gatewayClass:
+              enabled: false
+            ingressClass:
+              enabled: false
+            securityContext:
+              capabilities:
+                drop:
+                  - ALL
+                add:
+                  - NET_BIND_SERVICE
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              runAsNonRoot: true
+            log:
+              level: INFO
+            accessLog:
+              enabled: true
+            additionalArguments:
+              - "--serverstransport.insecureskipverify=true"
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: traefik
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+
+  # 2. Metrics Server
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: metrics-server
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: default
+      source:
+        repoURL: https://kubernetes-sigs.github.io/metrics-server/
+        chart: metrics-server
+        targetRevision: 3.14.0
+        helm:
+          valuesObject:
+            args:
+              - --cert-dir=/tmp
+              - --secure-port=10250
+              - --kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname
+              - --kubelet-use-node-status-port
+              - --kubelet-insecure-tls
+              - --metric-resolution=15s
+            resources:
+              requests:
+                cpu: 100m
+                memory: 200Mi
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: kube-system
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+
+  # 3. Cert-Manager
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: cert-manager
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: default
+      source:
+        repoURL: https://charts.jetstack.io
+        chart: cert-manager
+        targetRevision: v1.21.2
+        helm:
+          valuesObject:
+            crds:
+              enabled: true
+            extraArgs:
+              - --enable-gateway-api
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+            webhook:
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+            cainjector:
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: cert-manager
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+
+  # 4. Harbor Container Registry
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: harbor
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "2"
+    spec:
+      project: default
+      source:
+        repoURL: https://helm.goharbor.io
+        chart: harbor
+        targetRevision: 1.19.2
+        helm:
+          valuesObject:
+            expose:
+              type: route
+              tls:
+                enabled: false
+              route:
+                parentRefs:
+                  - name: main-gateway
+                    namespace: default
+                hosts:
+                  - cr.chetan.local
+            externalURL: https://cr.chetan.local
+            harborAdminPassword: "Harbor12345"
+            persistence:
+              enabled: true
+              resourcePolicy: keep
+              persistentVolumeClaim:
+                registry:
+                  size: 10Gi
+                jobservice:
+                  jobLog:
+                    size: 1Gi
+                database:
+                  size: 1Gi
+                redis:
+                  size: 1Gi
+                trivy:
+                  size: 5Gi
+            ipFamily:
+              ipv6:
+                enabled: false
+            portal:
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+            core:
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+            jobservice:
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+            registry:
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+            database:
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+            redis:
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+            trivy:
+              enabled: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: harbor
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+
+  # 5. Forgejo Git Service
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: forgejo
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "2"
+    spec:
+      project: default
+      source:
+        repoURL: code.forgejo.org/forgejo-helm
+        chart: forgejo
+        targetRevision: 17.2.0
+        helm:
+          valuesObject:
+            image:
+              registry: code.forgejo.org
+              repository: forgejo/forgejo
+              tag: "15.0.10"
+              rootless: true
+            httpRoute:
+              enabled: true
+              terminate: true
+              parentRefs:
+                - name: main-gateway
+                  namespace: default
+              hostnames:
+                - git.chetan.local
+              matches:
+                path:
+                  type: PathPrefix
+                  value: /
+            gitea:
+              admin:
+                username: forgejo_admin
+                password: "Forgejo12345"
+                email: "admin@chetan.local"
+                passwordMode: keepUpdated
+              config:
+                APP_NAME: "Forgejo Git Service"
+                RUN_MODE: prod
+                server:
+                  DOMAIN: git.chetan.local
+                  ROOT_URL: https://git.chetan.local/
+                  SSH_DOMAIN: git.chetan.local
+                  SSH_PORT: 22
+                  SSH_LISTEN_PORT: 2222
+                  START_SSH_SERVER: true
+                actions:
+                  ENABLED: true
+                  DEFAULT_ACTIONS_URL: https://data.forgejo.org
+                repository:
+                  DEFAULT_BRANCH: main
+                  ENABLE_PUSH_CREATE_USER: true
+                  ENABLE_PUSH_CREATE_ORG: true
+                security:
+                  INSTALL_LOCK: true
+            persistence:
+              enabled: true
+              claimName: forgejo-data
+              size: 10Gi
+              accessModes:
+                - ReadWriteOnce
+              annotations:
+                helm.sh/resource-policy: keep
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+              limits:
+                memory: 1Gi
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: forgejo
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+
+  # 6. Forgejo Actions Runner
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: forgejo-runner
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "3"
+    spec:
+      project: default
+      source:
+        repoURL: codeberg.org/wrenix/helm-charts
+        chart: forgejo-runner
+        targetRevision: 0.7.6
+        helm:
+          valuesObject:
+            knownLastVersion: true
+            replicaCount: 1
+            image:
+              registry: code.forgejo.org
+              repository: forgejo/runner
+              tag: "12.7.3"
+              pullPolicy: IfNotPresent
+            runner:
+              config:
+                create: true
+                existingInitSecret: "forgejo-runner-secret"
+                instance: "http://forgejo-http.forgejo.svc.cluster.local:3000"
+                name: "k8s-runner"
+                file:
+                  log:
+                    level: "info"
+                    job_level: "info"
+                  runner:
+                    file: ".runner"
+                    capacity: 2
+                    timeout: 3h
+                    insecure: true
+                    fetch_timeout: 5s
+                    fetch_interval: 2s
+                    labels:
+                      - "ubuntu-latest:docker://node:18-bullseye"
+                      - "ubuntu-22.04:docker://node:18-bullseye"
+                      - "docker:docker://docker:dind"
+                  container:
+                    privileged: true
+                    options: "--add-host=git.chetan.local:host-gateway"
+                    workdir_parent: /workspace
+                    valid_volumes:
+                      - "**"
+            dind:
+              image:
+                registry: docker.io
+                repository: library/docker
+                tag: "29.3.1-dind"
+                pullPolicy: IfNotPresent
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+            securityContext:
+              privileged: true
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: forgejo-runner
+      syncPolicy:
+        automated:
+          prune: false
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true

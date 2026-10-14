@@ -1,0 +1,28 @@
+# ============================================================
+# Argo CD Gateway API HTTPRoute
+# Routes https://argocd.chetan.local to argocd-server
+# ============================================================
+
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+
+metadata:
+  name: argocd-server-route
+  namespace: argocd
+
+spec:
+  parentRefs:
+    - name: main-gateway
+      namespace: default
+
+  hostnames:
+    - "argocd.chetan.local"
+
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: argocd-server
+          port: 80

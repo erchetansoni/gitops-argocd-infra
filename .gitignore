@@ -1,5 +1,42 @@
+# Environment files and credentials (never commit secrets!)
 .env
+.env.local
+.env.*.local
 *.env
-!.env.example
-aws-secrets-manager/aws-secrets
-aws-secrets-manager/aws-secret-file
+!*.env.example
+07-apps/.env
+
+# Certificate files and private keys (never commit secrets / generated PKI to git)
+04-traefik-gateway/cert/tls-generator/ca-store/*
+04-traefik-gateway/cert/tls-generator/server/*
+04-traefik-gateway/cert/tls-generator/client/*
+04-traefik-gateway/cert/tls-generator/output/*
+
+# Preserve directory structure with .gitkeep
+!04-traefik-gateway/cert/tls-generator/ca-store/.gitkeep
+!04-traefik-gateway/cert/tls-generator/server/.gitkeep
+!04-traefik-gateway/cert/tls-generator/client/.gitkeep
+!04-traefik-gateway/cert/tls-generator/output/.gitkeep
+
+# Track scripts in server and client
+!04-traefik-gateway/cert/tls-generator/server/*.sh
+!04-traefik-gateway/cert/tls-generator/server/*.ps1
+!04-traefik-gateway/cert/tls-generator/client/*.sh
+!04-traefik-gateway/cert/tls-generator/client/*.ps1
+
+# Log files
+*.log
+
+# Large Air-Gap image archives and chart packages (ignored in any directory at any depth)
+*.tar*
+*.tar
+*.tgz
+*.tar.gz
+*.tar.zst
+
+# Temporary / OS files
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
