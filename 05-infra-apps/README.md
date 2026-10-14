@@ -151,6 +151,50 @@ kubectl get crd -l app.kubernetes.io/name=cert-manager
 
 ---
 
+## 🛠️ How to Upgrade, Downgrade, or Adjust Any Platform App
+
+With the **App-of-Apps** orchestrator in place, you **never** run manual `helm upgrade` or `kubectl apply` commands. Everything is driven by Git pushes to your in-cluster Forgejo repository:
+
+### The 3-Step Modification Workflow:
+
+1. **Edit `platform-apps.yaml` locally**:
+   * *To upgrade/downgrade an app*: Change `targetRevision` under the app's `source:` block (e.g., change `targetRevision: 3.14.0` to `3.13.0` for `metrics-server`).
+   * *To adjust Helm values*: Edit the `valuesObject:` section (e.g., change replicas, memory/CPU requests, or log levels).
+2. **Commit and push to Forgejo**:
+   ```bash
+   git add 05-infra-apps/platform-apps.yaml
+   git commit -m "chore: upgrade metrics-server to 3.14.0"
+   git push forgejo main
+   ```
+3. **Argo CD reconciles automatically**:
+   * The parent application (`infra-apps`) detects the new commit SHA in Forgejo.
+   * It applies the updated configuration to the child application.
+   * Kubernetes rolls out the changes with zero downtime.
+
+---
+
+## 🛡️ Self-Healing & Drift Detection in Action
+
+Every platform application has `selfHeal: true` configured:
+
+```yaml
+syncPolicy:
+  automated:
+    prune: false
+    selfHeal: true
+```
+
+### What happens if a resource is deleted or modified manually?
+If an engineer or automated script deletes a resource directly:
+```bash
+kubectl delete deployment metrics-server -n kube-system
+```
+1. Argo CD's application controller detects a discrepancy between the cluster state (`NotFound`) and the desired state declared in Git.
+2. Within seconds, Argo CD triggers an automated **Self-Heal**.
+3. It re-applies the missing manifest, and the pods restart automatically. Manual tampering or accidental deletion is immediately corrected.
+
+---
+
 ## Next Step
 
 With infrastructure apps declared, proceed to:

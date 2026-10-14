@@ -38,13 +38,31 @@ This guide details how to migrate and deploy this entire GitOps platform from lo
 | Component | Online Source | Air-Gap Offline Source |
 | :--- | :--- | :--- |
 | **K3s Binary & Images** | `get.k3s.io` | `k3s` binary + `k3s-airgap-images-amd64.tar.zst` |
-| **Container Images** | Docker Hub, Quay, GHCR, k8s.io | `airgap/airgap-images.tar` (imported into K3s containerd) |
+| **Container Images** | Docker Hub, Quay, GHCR, k8s.io | `airgap/airgap-images.tar` (imported into containerd) |
 | **Gateway API CRDs** | `github.com/.../standard-install.yaml` | `02-traefik-controller/k8s-gateway-api-crd-v1.6.2-install.yaml` |
-| **Traefik Helm Chart** | `https://traefik.github.io/charts` | `02-traefik-controller/traefik-41.6.0.tgz` |
-| **cert-manager Chart** | `https://charts.jetstack.io` | `03-cert-manager/cert-manager-v1.21.2.tgz` |
-| **Metrics Server Chart**| `https://kubernetes-sigs.github.io/...` | `05-infra-apps/02-metrics-server/metrics-server-3.14.0.tgz` |
+| **Traefik Helm Chart** | `https://traefik.github.io/charts` | `airgap/charts/traefik-41.6.0.tgz` |
+| **cert-manager Chart** | `https://charts.jetstack.io` | `airgap/charts/cert-manager-v1.21.2.tgz` |
+| **Metrics Server Chart**| `https://kubernetes-sigs.github.io/...` | `airgap/charts/metrics-server-3.14.0.tgz` |
+| **Harbor Registry Chart**| `https://helm.goharbor.io` | `airgap/charts/harbor-1.19.2.tgz` |
+| **Forgejo Git Chart** | `oci://code.forgejo.org/...` | `airgap/charts/forgejo-17.2.0.tgz` |
+| **Forgejo Runner Chart**| `oci://codeberg.org/...` | `airgap/charts/forgejo-runner-0.7.6.tgz` |
 | **Argo CD Manifest** | `raw.githubusercontent.com/...` | `06-argocd/argocd-install-v3.5.3.yaml` |
-| **Argo CD Helm Repo** | Public chart repos (`traefik.github.io`, etc.) | In-cluster service `http://airgap-helm-repo.argocd.svc:8080` |
+| **GitOps Git Source** | `github.com/erchetansoni/...` | In-cluster Forgejo `http://forgejo-http.forgejo.svc.cluster.local:3000/...` |
+| **Platform Helm Repo** | Public chart repos (`traefik.github.io`, etc.) | In-cluster service `http://airgap-helm-repo.argocd.svc:8080` |
+
+---
+
+### ❓ Why `http://airgap-helm-repo.argocd.svc:8080` Instead of Harbor or Forgejo?
+
+When operating offline, Argo CD cannot resolve public Helm URLs (`traefik.github.io`, `helm.goharbor.io`). A common question is: *Why not serve the offline charts from internal Harbor or Forgejo?*
+
+1. **Avoids the Harbor Circular Dependency ("Chicken-and-Egg")**:
+   Harbor is one of the applications being deployed! If Harbor's chart is stored inside Harbor, and Harbor crashes or is restarting during an upgrade, Argo CD **could not even download the Harbor Helm chart to repair it**. `airgap-helm-repo` is completely independent.
+2. **Zero Authentication Protocol Matching**:
+   Public Helm repositories use unauthenticated HTTP `GET` requests (`index.yaml` + `*.tgz`). `airgap-helm-repo` replicates this exact behavior over internal HTTP port 8080 with **zero tokens, passwords, or certificate verifications**. Harbor requires OCI login credentials, and Forgejo requires Git/Package tokens.
+3. **Stateless & Instant Boot**:
+   `airgap-helm-repo` is a 5MB static micro-webserver backed directly by a Kubernetes Secret (`airgap-helm-charts`) populated from `airgap/charts/*.tgz`. It has **no database, no persistent volumes**, and boots in under 1 second.
+
 
 ---
 
