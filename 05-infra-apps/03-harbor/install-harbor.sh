@@ -8,13 +8,21 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 VALUES_FILE="${SCRIPT_DIR}/harbor-values.yaml"
-NAMESPACE="${NAMESPACE:-harbor}"
+NAMESPACE="${HARBOR_NAMESPACE:-${NAMESPACE:-harbor}}"
 RELEASE_NAME="${RELEASE_NAME:-harbor}"
 CHART_VERSION="${CHART_VERSION:-1.19.2}"
 HELM_CHART="${HELM_CHART:-harbor/harbor}"
 HELM_REPO_URL="${HELM_REPO_URL:-https://helm.goharbor.io}"
-HARBOR_HOST="${HARBOR_HOST:-cr.chetan.local}"
+HARBOR_HOST="${HARBOR_HOST:-cr.${MAIN_DOMAIN:-chetan.local}}"
 # ==============================================================================
 
 echo "================================================================="
@@ -72,6 +80,8 @@ helm upgrade --install "${RELEASE_NAME}" "${CHART_SOURCE}" \
   --namespace "${NAMESPACE}" \
   --create-namespace \
   --values "${VALUES_FILE_NATIVE}" \
+  --set externalURL="https://${HARBOR_HOST}" \
+  --set expose.route.hosts[0]="${HARBOR_HOST}" \
   --wait \
   --timeout 10m
 

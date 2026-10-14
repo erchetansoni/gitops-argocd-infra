@@ -7,47 +7,15 @@ export MSYS_NO_PATHCONV=1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ==============================================================================
-# FUNCTION: LOAD .ENV FILES SAFELY (HANDLES WINDOWS CRLF & QUOTES)
+# LOAD CENTRALIZED ENVIRONMENT (.env)
 # ==============================================================================
-load_env() {
-  local script_dir="$1"
-  local loaded=0
-
-  parse_env_file() {
-    local file="$1"
-    [[ ! -f "${file}" ]] && return
-    echo "📄 Sourcing environment variables from: ${file}"
-    while IFS= read -r line || [[ -n "${line}" ]]; do
-      # Strip carriage return and leading/trailing whitespace
-      line="$(echo "${line}" | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-      # Skip comments and empty lines
-      [[ -z "${line}" || "${line}" =~ ^# ]] && continue
-      # Match KEY=VALUE
-      if [[ "${line}" =~ ^([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]]; then
-        local key="${BASH_REMATCH[1]}"
-        local val="${BASH_REMATCH[2]}"
-        # Strip matching surrounding double or single quotes
-        if [[ "${val}" =~ ^\"(.*)\"$ ]] || [[ "${val}" =~ ^\'(.*)\'$ ]]; then
-          val="${BASH_REMATCH[1]}"
-        fi
-        export "${key}=${val}"
-      fi
-    done < "${file}"
-    loaded=1
-  }
-
-  # Load root .env first (if present)
-  parse_env_file "${script_dir}/../.env"
-  # Load local 05-apps/.env (overrides root .env if present)
-  parse_env_file "${script_dir}/.env"
-
-  if [[ ${loaded} -eq 0 ]]; then
-    echo "ℹ️  No .env file found (checked root .env and ${script_dir}/.env)."
-    echo "   Using environment variables or script defaults."
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
   fi
-}
-
-load_env "${SCRIPT_DIR}"
+done
 
 # ==============================================================================
 # CONFIGURATION VARIABLES (FROM .ENV OR DEFAULTS)

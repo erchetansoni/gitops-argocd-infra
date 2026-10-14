@@ -8,12 +8,20 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 VALUES_FILE="${SCRIPT_DIR}/forgejo-values.yaml"
-NAMESPACE="${NAMESPACE:-forgejo}"
+NAMESPACE="${FORGEJO_NAMESPACE:-${NAMESPACE:-forgejo}}"
 RELEASE_NAME="${RELEASE_NAME:-forgejo}"
 CHART_VERSION="${CHART_VERSION:-17.2.0}"
 HELM_CHART="${HELM_CHART:-oci://code.forgejo.org/forgejo-helm/forgejo}"
-FORGEJO_HOST="${FORGEJO_HOST:-git.chetan.local}"
+FORGEJO_HOST="${FORGEJO_HOST:-git.${MAIN_DOMAIN:-chetan.local}}"
 # ==============================================================================
 
 echo "================================================================="
@@ -69,6 +77,11 @@ helm upgrade --install "${RELEASE_NAME}" "${CHART_SOURCE}" \
   --namespace "${NAMESPACE}" \
   --create-namespace \
   --values "${VALUES_FILE_NATIVE}" \
+  --set httpRoute.hostnames[0]="${FORGEJO_HOST}" \
+  --set gitea.config.server.DOMAIN="${FORGEJO_HOST}" \
+  --set gitea.config.server.ROOT_URL="https://${FORGEJO_HOST}/" \
+  --set gitea.admin.username="${FORGEJO_USER:-forgejo_admin}" \
+  --set gitea.admin.password="${FORGEJO_PASS:-Forgejo12345}" \
   --wait \
   --timeout 10m
 

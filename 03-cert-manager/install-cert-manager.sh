@@ -8,9 +8,17 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 VALUES_FILE="${SCRIPT_DIR}/cert-manager-values.yaml"
 CLUSTER_ISSUER_FILE="${SCRIPT_DIR}/cluster-issuer.yaml"
-NAMESPACE="${NAMESPACE:-cert-manager}"
+NAMESPACE="${CERT_MANAGER_NAMESPACE:-${NAMESPACE:-cert-manager}}"
 RELEASE_NAME="${RELEASE_NAME:-cert-manager}"
 CHART_VERSION="${CHART_VERSION:-v1.21.2}"
 HELM_CHART="${HELM_CHART:-jetstack/cert-manager}"

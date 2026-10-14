@@ -5,10 +5,18 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
 # Configuration
-FORGEJO_HOST="${FORGEJO_HOST:-git.chetan.local}"
+FORGEJO_HOST="${FORGEJO_HOST:-git.${MAIN_DOMAIN:-chetan.local}}"
 FORGEJO_USER="${FORGEJO_USER:-forgejo_admin}"
 FORGEJO_PASS="${FORGEJO_PASS:-Forgejo12345}"
 REPO_NAME="${FORGEJO_REPO_NAME:-gitops-argocd-infra}"

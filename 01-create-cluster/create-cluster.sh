@@ -8,6 +8,14 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 CONFIG_FILE="${SCRIPT_DIR}/kind-cluster-config.yaml"
 # ==============================================================================
 

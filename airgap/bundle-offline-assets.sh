@@ -5,14 +5,24 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/images.yaml" ]]; then
-  IMAGES_FILE="${SCRIPT_DIR}/images.yaml"
-elif [[ -f "${SCRIPT_DIR}/images.yml" ]]; then
-  IMAGES_FILE="${SCRIPT_DIR}/images.yml"
-else
-  IMAGES_FILE="${SCRIPT_DIR}/images.txt"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
+if [[ -z "${IMAGES_FILE:-}" ]]; then
+  if [[ -f "${SCRIPT_DIR}/images.yaml" ]]; then
+    IMAGES_FILE="${SCRIPT_DIR}/images.yaml"
+  elif [[ -f "${SCRIPT_DIR}/images.yml" ]]; then
+    IMAGES_FILE="${SCRIPT_DIR}/images.yml"
+  else
+    IMAGES_FILE="${SCRIPT_DIR}/images.txt"
+  fi
 fi
-OUTPUT_TAR="${SCRIPT_DIR}/airgap-images.tar"
+OUTPUT_TAR="${AIRGAP_TAR_OUTPUT:-${OUTPUT_TAR:-${SCRIPT_DIR}/airgap-images.tar}}"
 CHARTS_DIR="${SCRIPT_DIR}/charts"
 
 echo "================================================================="

@@ -116,6 +116,38 @@ Before running the bootstrap scripts, ensure your workstation has:
 
 ---
 
+## ⚙️ Central Environment Configuration (`.env`)
+
+This repository features a centralized environment configuration system powered by [`load-env.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/load-env.sh) and [`.env.example`](file:///c:/Projects/My_Projects/gitops-argocd-infra/.env.example). **You do not need to repeat domain names, credentials, or URLs anywhere.**
+
+```bash
+# Copy template to project root:
+cp .env.example .env
+```
+
+### Zero-Repetition Domain Interpolation
+Simply set your base domain once in `.env`, and all service hostnames and in-cluster URLs derive from it automatically:
+
+```bash
+# 1. Set Primary Base Domain once:
+MAIN_DOMAIN="chetan.local"
+
+# 2. All FQDNs & Gateway API hostnames expand dynamically:
+ARGOCD_DOMAIN="argocd.${MAIN_DOMAIN}"   # -> argocd.chetan.local
+HARBOR_DOMAIN="cr.${MAIN_DOMAIN}"       # -> cr.chetan.local
+FORGEJO_DOMAIN="git.${MAIN_DOMAIN}"     # -> git.chetan.local
+DEV_DOMAIN="*.dev.${MAIN_DOMAIN}"       # -> *.dev.chetan.local
+
+# 3. In-cluster GitOps service URLs expand automatically:
+FORGEJO_INTERNAL_URL="http://forgejo-http.${FORGEJO_NAMESPACE}.svc.cluster.local:3000/${FORGEJO_USER}/${FORGEJO_REPO_NAME}.git"
+```
+
+### How It Works Across All 29 Scripts
+* **Automatic Sourcing**: Whether running [`main.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/main.sh) or executing any individual script standalone (e.g., `install-harbor.sh`), [`load-env.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/load-env.sh) automatically strips Windows CRLF line endings, evaluates variable expansions, and exports them.
+* **Precedence Hierarchy**: `CLI / Exported Shell Variables` > `Directory-Local .env (e.g., 07-apps/.env)` > `Root .env` > `Root .env.example` (safe out-of-the-box defaults).
+
+---
+
 ## 🚀 End-to-End Setup Guide
 
 You can run the entire platform bring-up automatically with a single command via [main.sh](file:///c:/Projects/My_Projects/gitops-argocd-infra/main.sh):

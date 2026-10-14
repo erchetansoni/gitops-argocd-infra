@@ -5,8 +5,16 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 NAMESPACE="${ARGOCD_NAMESPACE:-${NAMESPACE:-argocd}}"
-SECRET_NAME="${SECRET_NAME:-forgejo-infra-repo-secret}"
+SECRET_NAME="${FORGEJO_REPO_SECRET_NAME:-${SECRET_NAME:-forgejo-infra-repo-secret}}"
 FORGEJO_INTERNAL_URL="${FORGEJO_INTERNAL_URL:-http://forgejo-http.forgejo.svc.cluster.local:3000/forgejo_admin/gitops-argocd-infra.git}"
 FORGEJO_USER="${FORGEJO_USER:-forgejo_admin}"
 FORGEJO_PASS="${FORGEJO_PASS:-Forgejo12345}"
@@ -60,7 +68,7 @@ APP_OF_APPS="${SCRIPT_DIR}/../05-infra-apps/app-of-apps.yaml"
 if [[ -f "${APP_OF_APPS}" ]]; then
   echo ""
   echo "🚀 Deploying Root App-of-Apps (${APP_OF_APPS})..."
-  kubectl apply -f "${APP_OF_APPS}"
+  sed "s|http://forgejo-http.forgejo.svc.cluster.local:3000/forgejo_admin/gitops-argocd-infra.git|${FORGEJO_INTERNAL_URL}|g" "${APP_OF_APPS}" | kubectl apply -f -
   echo "✅ Root App-of-Apps 'infra-apps' is actively synchronizing from Forgejo main branch!"
 fi
 

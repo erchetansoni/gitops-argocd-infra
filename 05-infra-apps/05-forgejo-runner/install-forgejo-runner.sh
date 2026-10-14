@@ -8,8 +8,16 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 VALUES_FILE="${SCRIPT_DIR}/forgejo-runner-values.yaml"
-NAMESPACE="${NAMESPACE:-forgejo-runner}"
+NAMESPACE="${FORGEJO_RUNNER_NAMESPACE:-${NAMESPACE:-forgejo-runner}}"
 RELEASE_NAME="${RELEASE_NAME:-forgejo-runner}"
 CHART_VERSION="${CHART_VERSION:-0.7.6}"
 HELM_CHART="${HELM_CHART:-oci://codeberg.org/wrenix/helm-charts/forgejo-runner}"

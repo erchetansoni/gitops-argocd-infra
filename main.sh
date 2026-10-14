@@ -4,6 +4,12 @@ set -euo pipefail
 
 export MSYS_NO_PATHCONV=1
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/load-env.sh" ]]; then
+  # shellcheck disable=SC1090
+  source "${SCRIPT_DIR}/load-env.sh"
+fi
+
 # ==============================================================================
 # INTERNET DETECTION & INSTALLATION MODE SELECTION
 # ==============================================================================

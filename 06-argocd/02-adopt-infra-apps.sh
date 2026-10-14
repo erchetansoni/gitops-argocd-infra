@@ -5,6 +5,14 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 if [[ -f "${SCRIPT_DIR}/../05-infra-apps/platform-apps.yaml" ]]; then
   INFRA_MANIFEST="${SCRIPT_DIR}/../05-infra-apps/platform-apps.yaml"
 elif [[ -f "${SCRIPT_DIR}/../05-infra-apps/infra-apps-root.yaml" ]]; then
@@ -12,7 +20,7 @@ elif [[ -f "${SCRIPT_DIR}/../05-infra-apps/infra-apps-root.yaml" ]]; then
 else
   INFRA_MANIFEST="${SCRIPT_DIR}/platform-apps.yaml"
 fi
-NAMESPACE="${ARGOCD_NAMESPACE:-argocd}"
+NAMESPACE="${ARGOCD_NAMESPACE:-${NAMESPACE:-argocd}}"
 
 to_native_path() {
   local p="$1"
