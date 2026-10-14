@@ -100,12 +100,21 @@ git remote -v
 # Step 4: Push active branch and main to Forgejo
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 echo ""
-echo "🚀 Pushing active branch '${CURRENT_BRANCH}' to Forgejo remote '${REMOTE_NAME}'..."
-git push "${REMOTE_NAME}" "${CURRENT_BRANCH}:${CURRENT_BRANCH}" --force
+# Always push 'main' first to an empty repo so Git/Forgejo registers 'main' as default
+echo "🚀 Pushing code to Forgejo 'main' branch..."
+git push "${REMOTE_NAME}" "${CURRENT_BRANCH}:main" --force
+
 if [[ "${CURRENT_BRANCH}" != "main" ]]; then
-  echo "🚀 Also syncing '${CURRENT_BRANCH}' to Forgejo 'main' branch..."
-  git push "${REMOTE_NAME}" "${CURRENT_BRANCH}:main" --force
+  echo "🚀 Also syncing active branch '${CURRENT_BRANCH}' to Forgejo..."
+  git push "${REMOTE_NAME}" "${CURRENT_BRANCH}:${CURRENT_BRANCH}" --force
 fi
+
+# Step 5: Explicitly guarantee Forgejo repository default branch is 'main'
+echo "⚙️ Ensuring Forgejo default branch is set to 'main'..."
+curl -k -s -X PATCH -u "${FORGEJO_USER}:${FORGEJO_PASS}" \
+  -H "Content-Type: application/json" \
+  -d '{"default_branch": "main"}' \
+  "https://${FORGEJO_HOST}/api/v1/repos/${FORGEJO_USER}/${REPO_NAME}" >/dev/null 2>&1 || true
 
 echo ""
 echo "================================================================="
