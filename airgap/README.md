@@ -244,7 +244,7 @@ In an air-gapped environment, Argo CD cannot clone from `github.com`.
    http://gitea.local:3000/devops/gitops-argocd-apps.git
    ```
 
-2. **Update [07-apps/.env](file:///c:/Projects/My_Projects/gitops-argocd-infra/07-apps/.env)**:
+2. **Update [.env](file:///c:/Projects/My_Projects/gitops-argocd-infra/.env)** at repository root:
    ```env
    REPO_URL="http://gitea.local:3000/devops/gitops-argocd-apps.git"
    GITHUB_USERNAME="your-git-user"

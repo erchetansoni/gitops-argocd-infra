@@ -144,7 +144,8 @@ FORGEJO_INTERNAL_URL="http://forgejo-http.${FORGEJO_NAMESPACE}.svc.cluster.local
 
 ### How It Works Across All 29 Scripts
 * **Automatic Sourcing**: Whether running [`main.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/main.sh) or executing any individual script standalone (e.g., `install-harbor.sh`), [`load-env.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/load-env.sh) automatically strips Windows CRLF line endings, evaluates variable expansions, and exports them.
-* **Precedence Hierarchy**: `CLI / Exported Shell Variables` > `Directory-Local .env (e.g., 07-apps/.env)` > `Root .env` > `Root .env.example` (safe out-of-the-box defaults).
+* **Precedence Hierarchy**: `CLI / Exported Shell Variables` > `Root .env` > `Root .env.example` (safe out-of-the-box defaults).
+* **Instant Credentials Summary**: Run [`./print-summary.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/print-summary.sh) (or [`.\print-summary.ps1`](file:///c:/Projects/My_Projects/gitops-argocd-infra/print-summary.ps1)) anytime to inspect live cluster health, URLs, usernames, passwords, and DNS entries without scrolling through terminal output.
 
 ---
 
@@ -235,9 +236,8 @@ bash 06-argocd/03-configure-forgejo-repo.sh
 
 ### Step 11: Connect Workload Repo & Deploy ApplicationSet
 ```bash
-# 1. Configure GitHub token in .env:
-cp 07-apps/.env.example 07-apps/.env
-# Edit 07-apps/.env with your GitHub Personal Access Token (PAT)
+# 1. Configure GitHub token in root .env:
+# Ensure GITHUB_TOKEN="github_pat_..." is set in your root .env
 
 # 2. Apply GitHub repo credentials secret:
 bash 07-apps/01-install-repo-creds-secret.sh
