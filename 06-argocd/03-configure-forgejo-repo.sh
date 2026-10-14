@@ -55,4 +55,13 @@ if kubectl get deployment argocd-repo-server -n "${NAMESPACE}" >/dev/null 2>&1; 
   fi
 fi
 
+# Deploy Root App-of-Apps to track Forgejo main branch
+APP_OF_APPS="${SCRIPT_DIR}/../05-infra-apps/app-of-apps.yaml"
+if [[ -f "${APP_OF_APPS}" ]]; then
+  echo ""
+  echo "🚀 Deploying Root App-of-Apps (${APP_OF_APPS})..."
+  kubectl apply -f "${APP_OF_APPS}"
+  echo "✅ Root App-of-Apps 'infra-apps' is actively synchronizing from Forgejo main branch!"
+fi
+
 echo "================================================================="

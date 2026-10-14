@@ -70,8 +70,9 @@ A common question when designing an air-gapped or local platform is: **"Should H
 ## Argo CD GitOps Management
 
 Harbor is managed declaratively by Argo CD via:
-* **Root Application List**: Declared in [infra-apps-root.yaml](../infra-apps-root.yaml) under `sync-wave: "2"`.
+* **Platform Applications List**: Declared in [platform-apps.yaml](../platform-apps.yaml) under `sync-wave: "2"`.
 * **Adoption**: Automatically adopted during [06-argocd/02-adopt-infra-apps.sh](../../06-argocd/02-adopt-infra-apps.sh).
+* **Continuous GitOps**: Orchestrated by the parent [app-of-apps.yaml](../app-of-apps.yaml) watching Forgejo `main`.
 
 Verify Argo CD application status:
 

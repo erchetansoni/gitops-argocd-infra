@@ -5,10 +5,12 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/../05-infra-apps/infra-apps-root.yaml" ]]; then
+if [[ -f "${SCRIPT_DIR}/../05-infra-apps/platform-apps.yaml" ]]; then
+  INFRA_MANIFEST="${SCRIPT_DIR}/../05-infra-apps/platform-apps.yaml"
+elif [[ -f "${SCRIPT_DIR}/../05-infra-apps/infra-apps-root.yaml" ]]; then
   INFRA_MANIFEST="${SCRIPT_DIR}/../05-infra-apps/infra-apps-root.yaml"
 else
-  INFRA_MANIFEST="${SCRIPT_DIR}/infra-apps-root.yaml"
+  INFRA_MANIFEST="${SCRIPT_DIR}/platform-apps.yaml"
 fi
 NAMESPACE="${ARGOCD_NAMESPACE:-argocd}"
 

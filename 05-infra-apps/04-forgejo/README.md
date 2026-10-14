@@ -88,8 +88,8 @@ Forgejo serves Git repositories across two network boundaries:
 
 ## Argo CD GitOps Management
 
-Forgejo is declared in [infra-apps-root.yaml](../infra-apps-root.yaml) under `sync-wave: "2"`.
-It is synchronized alongside other platform infrastructure applications during cluster bootstrapping or via `06-argocd/02-adopt-infra-apps.sh`.
+Forgejo is declared in [platform-apps.yaml](../platform-apps.yaml) under `sync-wave: "2"`.
+It is synchronized alongside other platform infrastructure applications during cluster bootstrapping or via `06-argocd/02-adopt-infra-apps.sh`, and orchestrated continuously by [app-of-apps.yaml](../app-of-apps.yaml).
 
 Verify Argo CD application status:
 

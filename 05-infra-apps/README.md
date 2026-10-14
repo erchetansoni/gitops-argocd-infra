@@ -10,7 +10,7 @@ In enterprise Kubernetes environments, cluster operations are strictly split int
 1. **Platform / Infra Apps** (this directory): Shared cluster services like Ingress/Gateway controllers, metrics/monitoring, and cert managers managed by the DevOps/Platform team.
 2. **Workload Apps** ([07-apps](../07-apps/README.md)): Tenant application microservices managed by development teams.
 
-All platform components are declared in [infra-apps-root.yaml](infra-apps-root.yaml) and synchronized automatically by Argo CD.
+All platform components are declared in [platform-apps.yaml](platform-apps.yaml) and orchestrated continuously via the App-of-Apps parent [app-of-apps.yaml](app-of-apps.yaml) synced from Forgejo.
 
 ---
 
@@ -102,19 +102,21 @@ All platform components are declared in [infra-apps-root.yaml](infra-apps-root.y
 │   ├── forgejo-runner-values.yaml      # Forgejo Runner Helm values (DinD sidecar)
 │   ├── install-forgejo-runner.sh       # Pre-install / standalone install script
 │   └── README.md                       # Documentation & Actions runner guide
-├── infra-apps-root.yaml                # Root Application manifest containing infra apps
+├── app-of-apps.yaml                    # Parent Argo CD Application (App-of-Apps) tracking Forgejo main
+├── platform-apps.yaml                  # Declarative list of all 6 platform child applications
 └── README.md                           # Documentation
 ```
 
 ---
 
-## How Infra Apps Are Adopted by Argo CD
+## How Infra Apps Are Managed (App-of-Apps Pattern)
 
-Instead of manual `helm install` commands drifting over time, the script [06-argocd/02-adopt-infra-apps.sh](../06-argocd/02-adopt-infra-apps.sh) adopts all running components:
+Instead of manual `helm install` commands drifting over time, the platform uses the **GitOps App-of-Apps** pattern:
 
-1. Injects Helm release ownership annotations (`meta.helm.sh/release-name` and `app.kubernetes.io/managed-by: Helm`).
-2. Applies [infra-apps-root.yaml](infra-apps-root.yaml) using Server-Side Apply (`ServerSideApply=true`).
-3. Argo CD automatically assumes declarative control without terminating running pods.
+1. **Child Applications List** (`platform-apps.yaml`): Declares the desired configuration, charts, and values for all 6 infrastructure apps.
+2. **Parent Orchestrator** (`app-of-apps.yaml`): A top-level Argo CD Application (`metadata.name: infra-apps`) that continuously watches the in-cluster Forgejo repository on branch `main`.
+3. **Adoption**: The script [06-argocd/02-adopt-infra-apps.sh](../06-argocd/02-adopt-infra-apps.sh) injects Helm ownership annotations and applies [platform-apps.yaml](platform-apps.yaml) via Server-Side Apply.
+4. **Continuous Sync**: When [06-argocd/03-configure-forgejo-repo.sh](../06-argocd/03-configure-forgejo-repo.sh) applies [app-of-apps.yaml](app-of-apps.yaml), Argo CD establishes a live GitOps feedback loop. Any commit pushed to Forgejo `main` automatically updates the cluster.
 
 ---
 
