@@ -68,8 +68,8 @@ echo ""
 ./06-argocd/01-install-argocd.sh
 ./06-argocd/02-adopt-infra-apps.sh
 ./06-argocd/03-configure-forgejo-repo.sh
-# ./07-apps/01-install-repo-creds-secret.sh
-# ./07-apps/02-install-root-app.sh
+./07-apps/01-install-repo-creds-secret.sh
+./07-apps/02-install-root-app.sh
 
 
 

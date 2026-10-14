@@ -188,12 +188,16 @@ missing_images=()
 
 for img in "${images[@]}"; do
   stripped_img="${img#docker.io/}"
+  stripped_lib="${stripped_img#library/}"
   if echo "${local_images}" | grep -Fxq "${img}"; then
     present_images+=("$img")
     [[ "${LIST_ONLY}" == "true" ]] && echo "  ✅ Present:  $img"
   elif echo "${local_images}" | grep -Fxq "${stripped_img}"; then
     present_images+=("$stripped_img")
     [[ "${LIST_ONLY}" == "true" ]] && echo "  ✅ Present:  $stripped_img (matches $img)"
+  elif echo "${local_images}" | grep -Fxq "${stripped_lib}"; then
+    present_images+=("$stripped_lib")
+    [[ "${LIST_ONLY}" == "true" ]] && echo "  ✅ Present:  $stripped_lib (matches $img)"
   else
     missing_images+=("$img")
     [[ "${LIST_ONLY}" == "true" ]] && echo "  ❌ Missing:  $img"
