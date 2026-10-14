@@ -77,12 +77,28 @@ helm upgrade --install "${RELEASE_NAME}" "${CHART_SOURCE}" \
 
 # Step 2: Wait for rollout of the deployments to complete
 echo "⏳ Waiting for Harbor deployments rollout to complete..."
-for d in core portal jobservice registry; do
+for d in core portal jobservice registry database redis; do
   if kubectl get deployment "${RELEASE_NAME}-${d}" -n "${NAMESPACE}" >/dev/null 2>&1; then
     echo "   Checking deployment: ${RELEASE_NAME}-${d}..."
     kubectl rollout status deployment/"${RELEASE_NAME}-${d}" -n "${NAMESPACE}" --timeout=180s || true
   fi
 done
+
+# Step 3: Wait for Harbor HTTP/API health check
+echo "⏳ Verifying Harbor API health..."
+MAX_RETRIES=20
+RETRY_COUNT=0
+until curl -k -s --connect-timeout 2 "https://${HARBOR_HOST}/api/v2.0/health" | grep -q '"status":"healthy"' 2>/dev/null; do
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  if [[ ${RETRY_COUNT} -ge ${MAX_RETRIES} ]]; then
+    echo "   ⚠️ Harbor API health check timed out, proceeding with cluster status."
+    break
+  fi
+  echo "   Waiting for Harbor API health endpoint (${RETRY_COUNT}/${MAX_RETRIES})..."
+  sleep 3
+done
+echo "✅ Harbor health check passed!"
+
 
 echo ""
 echo "================================================================="

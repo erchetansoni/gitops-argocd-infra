@@ -57,10 +57,13 @@ echo ""
 ./05-infra-apps/02-metrics-server/install-metrics-server.sh
 ./05-infra-apps/03-harbor/install-harbor.sh
 ./05-infra-apps/04-forgejo/install-forgejo.sh
+./05-infra-apps/04-forgejo/sync-repo-to-forgejo.sh
 ./05-infra-apps/05-forgejo-runner/install-forgejo-runner.sh
 ./06-argocd/01-install-argocd.sh
 ./06-argocd/02-adopt-infra-apps.sh
+./06-argocd/03-configure-forgejo-repo.sh
 # ./07-apps/01-install-repo-creds-secret.sh
 # ./07-apps/02-install-root-app.sh
+
 
 

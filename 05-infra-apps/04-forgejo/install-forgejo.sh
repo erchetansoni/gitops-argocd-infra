@@ -76,6 +76,22 @@ helm upgrade --install "${RELEASE_NAME}" "${CHART_SOURCE}" \
 echo "⏳ Waiting for Forgejo deployment rollout to complete..."
 kubectl rollout status deployment/"${RELEASE_NAME}" -n "${NAMESPACE}" --timeout=300s || true
 
+# Step 3: Wait for Forgejo HTTP/API health check
+echo "⏳ Verifying Forgejo API health..."
+MAX_RETRIES=20
+RETRY_COUNT=0
+until curl -k -s --connect-timeout 2 "https://${FORGEJO_HOST}/api/v1/version" | grep -q '"version"' 2>/dev/null; do
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  if [[ ${RETRY_COUNT} -ge ${MAX_RETRIES} ]]; then
+    echo "   ⚠️ Forgejo API health check timed out, proceeding with cluster status."
+    break
+  fi
+  echo "   Waiting for Forgejo API health endpoint (${RETRY_COUNT}/${MAX_RETRIES})..."
+  sleep 3
+done
+echo "✅ Forgejo health check passed!"
+
+
 echo ""
 echo "================================================================="
 echo " 🔍 Forgejo Verification & Route Information"
