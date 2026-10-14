@@ -1,0 +1,78 @@
+# ============================================================
+# Forgejo Git Service - Helm Values
+# Subdomain: git.chetan.local
+# Gateway: main-gateway (Traefik Gateway API)
+# ============================================================
+
+image:
+  registry: code.forgejo.org
+  repository: forgejo/forgejo
+  tag: "15.0.10"
+  rootless: true
+
+# Gateway API HTTPRoute definition for modern Kubernetes routing
+httpRoute:
+  enabled: true
+  terminate: true
+  parentRefs:
+    - name: main-gateway
+      namespace: default
+  hostnames:
+    - git.chetan.local
+  matches:
+    path:
+      type: PathPrefix
+      value: /
+
+# Admin credentials for initial installation & GitOps management
+gitea:
+  admin:
+    username: forgejo_admin
+    password: "Forgejo12345"
+    email: "admin@chetan.local"
+    passwordMode: keepUpdated
+
+  config:
+    APP_NAME: "Forgejo Git Service"
+    RUN_MODE: prod
+
+    server:
+      DOMAIN: git.chetan.local
+      ROOT_URL: https://git.chetan.local/
+      SSH_DOMAIN: git.chetan.local
+      SSH_PORT: 22
+      SSH_LISTEN_PORT: 2222
+      START_SSH_SERVER: true
+
+    # Enable built-in Forgejo Actions (CI/CD)
+    actions:
+      ENABLED: true
+      DEFAULT_ACTIONS_URL: https://data.forgejo.org
+
+    # Repository settings
+    repository:
+      DEFAULT_BRANCH: main
+      ENABLE_PUSH_CREATE_USER: true
+      ENABLE_PUSH_CREATE_ORG: true
+
+    # Site security
+    security:
+      INSTALL_LOCK: true
+
+# Persistent volume storage for Git repositories, SQLite DB, and LFS
+persistence:
+  enabled: true
+  claimName: forgejo-data
+  size: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  annotations:
+    helm.sh/resource-policy: keep
+
+# Resource allocation for local Kind development cluster
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 1Gi

@@ -1,0 +1,66 @@
+# ============================================================
+# Forgejo Actions Runner - Helm Values
+# Instance: http://forgejo-http.forgejo.svc.cluster.local:3000
+# Execution Mode: Docker-in-Docker (DinD) sidecar
+# ============================================================
+
+# Required by the chart to acknowledge last released version
+knownLastVersion: true
+
+replicaCount: 1
+
+image:
+  registry: code.forgejo.org
+  repository: forgejo/runner
+  tag: "12.7.3"
+  pullPolicy: IfNotPresent
+
+runner:
+  config:
+    create: true
+    # Initial configuration secret containing CONFIG_NAME, CONFIG_INSTANCE, CONFIG_TOKEN
+    existingInitSecret: "forgejo-runner-secret"
+    instance: "http://forgejo-http.forgejo.svc.cluster.local:3000"
+    name: "k8s-runner"
+    file:
+      log:
+        level: "info"
+        job_level: "info"
+      runner:
+        file: ".runner"
+        capacity: 2
+        timeout: 3h
+        insecure: true
+        fetch_timeout: 5s
+        fetch_interval: 2s
+        labels:
+          - "ubuntu-latest:docker://node:18-bullseye"
+          - "ubuntu-22.04:docker://node:18-bullseye"
+          - "docker:docker://docker:dind"
+      container:
+        privileged: true
+        options: "--add-host=git.chetan.local:host-gateway"
+        workdir_parent: /workspace
+        valid_volumes:
+          - "**"
+
+# Docker-in-Docker sidecar for executing containerized workflow jobs
+dind:
+  image:
+    registry: docker.io
+    repository: library/docker
+    tag: "29.3.1-dind"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# Privilege escalation required for Docker daemon in Kubernetes
+securityContext:
+  privileged: true
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi

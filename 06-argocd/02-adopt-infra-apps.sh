@@ -117,5 +117,7 @@ echo "   - Traefik Gateway Controller (traefik-gateway-controller)"
 echo "   - Metrics Server (metrics-server)"
 echo "   - cert-manager (cert-manager)"
 echo "   - Harbor Container Registry (harbor)"
+echo "   - Forgejo Git Service (forgejo)"
+echo "   - Forgejo Actions Runner (forgejo-runner)"
 echo "================================================================="
 
