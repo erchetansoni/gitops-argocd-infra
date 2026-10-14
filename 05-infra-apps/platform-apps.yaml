@@ -439,3 +439,172 @@ items:
           - CreateNamespace=true
           - ServerSideApply=true
           - RespectIgnoreDifferences=true
+
+  # 7. Zabbix Monitoring Platform (TimescaleDB, Proxy, Agent 2)
+  - apiVersion: argoproj.io/v1alpha1
+    kind: Application
+    metadata:
+      name: zabbix
+      namespace: argocd
+    annotations:
+      argocd.argoproj.io/sync-wave: "2"
+  spec:
+    project: default
+    source:
+      repoURL: https://zabbix-community.github.io/helm-zabbix
+      chart: zabbix
+      targetRevision: 7.1.0
+      helm:
+        valuesObject:
+          zabbixImageTag: "alpine-7.4.15"
+          postgresAccess:
+            host: "zabbix-postgresql"
+            port: "5432"
+            user: "zabbix"
+            password: "Zabbix12345"
+            database: "zabbix"
+          postgresql:
+            enabled: true
+            image:
+              repository: timescale/timescaledb
+              tag: "2.17.2-pg16"
+              pullPolicy: IfNotPresent
+            max_connections: 150
+            persistence:
+              enabled: true
+              storageSize: 10Gi
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+          zabbixServer:
+            enabled: true
+            replicaCount: 1
+            image:
+              repository: zabbix/zabbix-server-pgsql
+              tag: "alpine-7.4.15"
+              pullPolicy: IfNotPresent
+            zabbixServerHA:
+              enabled: false
+            haNodesAutoClean:
+              enabled: false
+            service:
+              type: ClusterIP
+              port: 10051
+            extraEnv:
+              - name: ENABLE_TIMESCALEDB
+                value: "true"
+              - name: ZBX_DBEXTENDEDSTATUS
+                value: "1"
+              - name: ZBX_STARTSNMPTRAPPERS
+                value: "1"
+            extraContainers:
+              - name: zabbix-snmptraps
+                image: "zabbix/zabbix-snmptraps:alpine-7.4.15"
+                imagePullPolicy: IfNotPresent
+                ports:
+                  - name: snmptraps
+                    containerPort: 1162
+                    protocol: UDP
+                volumeMounts:
+                  - name: snmptraps-dir
+                    mountPath: /var/lib/zabbix/snmptraps
+            extraVolumes:
+              - name: snmptraps-dir
+                emptyDir: {}
+            extraVolumeMounts:
+              - name: snmptraps-dir
+                mountPath: /var/lib/zabbix/snmptraps
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+          zabbixWeb:
+            enabled: true
+            replicaCount: 1
+            image:
+              repository: zabbix/zabbix-web-nginx-pgsql
+              tag: "alpine-7.4.15"
+              pullPolicy: IfNotPresent
+            ZBX_SERVER_HOST: zabbix-zabbix-server
+            ZBX_SERVER_PORT: 10051
+            service:
+              type: ClusterIP
+              port: 80
+            extraEnv:
+              - name: ZBX_DBEXTENDEDSTATUS
+                value: "1"
+              - name: PHP_TZ
+                value: "UTC"
+            resources:
+              requests:
+                cpu: 100m
+                memory: 128Mi
+          zabbixProxy:
+            enabled: true
+            replicaCount: 1
+            image:
+              repository: zabbix/zabbix-proxy-sqlite3
+              tag: "alpine-7.4.15"
+              pullPolicy: IfNotPresent
+            ZBX_PROXYMODE: 0
+            ZBX_HOSTNAME: "zbx-proxy"
+            ZBX_SERVER_HOST: zabbix-zabbix-server
+            ZBX_SERVER_PORT: 10051
+            service:
+              type: ClusterIP
+              port: 10051
+            persistentVolume:
+              enabled: true
+              size: 2Gi
+            resources:
+              requests:
+                cpu: 50m
+                memory: 128Mi
+          zabbixAgent:
+            enabled: true
+            runAsSidecar: false
+            runAsDaemonSet: true
+            image:
+              repository: zabbix/zabbix-agent2
+              tag: "alpine-7.4.15"
+              pullPolicy: IfNotPresent
+            ZBX_SERVER_HOST: "zabbix-zabbix-server"
+            ZBX_SERVER_PORT: 10051
+            ZBX_PASSIVE_ALLOW: true
+            ZBX_ACTIVE_ALLOW: false
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+          extraManifests:
+            - apiVersion: v1
+              kind: Service
+              metadata:
+                name: zabbix-snmptraps
+                namespace: zabbix
+                labels:
+                  app.kubernetes.io/name: zabbix
+                  app.kubernetes.io/component: snmptraps
+              spec:
+                type: ClusterIP
+                selector:
+                  app.kubernetes.io/name: zabbix
+                  app.kubernetes.io/component: server
+                ports:
+                  - name: snmptraps-udp
+                    port: 162
+                    targetPort: 1162
+                    protocol: UDP
+    destination:
+      server: https://kubernetes.default.svc
+      namespace: zabbix
+    syncPolicy:
+      automated:
+        prune: false
+        selfHeal: true
+      syncOptions:
+        - CreateNamespace=true
+        - ServerSideApply=true
+        - RespectIgnoreDifferences=true
+

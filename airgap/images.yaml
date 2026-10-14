@@ -134,3 +134,32 @@ images:
   - component: forgejo-runner-kubectl
     description: "Kubectl helper image for runner hook jobs"
     image: docker.io/alpine/kubectl:1.35.3
+
+  # ----------------------------------------------------------------------------
+  # 8. Zabbix Monitoring Platform v7.4.15 (Step 05: 05-infra-apps/06-zabbix)
+  # ----------------------------------------------------------------------------
+  - component: zabbix-timescaledb
+    description: "TimescaleDB PostgreSQL 16 time-series database backend for Zabbix"
+    image: docker.io/timescale/timescaledb:2.17.2-pg16
+
+  - component: zabbix-server
+    description: "Zabbix Server daemon with PostgreSQL/TimescaleDB support"
+    image: docker.io/zabbix/zabbix-server-pgsql:alpine-7.4.15
+
+  - component: zabbix-web
+    description: "Zabbix Web Frontend with Nginx and PostgreSQL driver"
+    image: docker.io/zabbix/zabbix-web-nginx-pgsql:alpine-7.4.15
+
+  - component: zabbix-proxy
+    description: "Zabbix Proxy with SQLite3 database engine"
+    image: docker.io/zabbix/zabbix-proxy-sqlite3:alpine-7.4.15
+
+  - component: zabbix-snmptraps
+    description: "Zabbix SNMP Traps daemon sidecar receiver"
+    image: docker.io/zabbix/zabbix-snmptraps:alpine-7.4.15
+
+  - component: zabbix-agent2
+    description: "Zabbix Agent 2 monitoring daemon for Kubernetes nodes"
+    image: docker.io/zabbix/zabbix-agent2:alpine-7.4.15
+
+

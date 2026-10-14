@@ -29,6 +29,12 @@ FORGEJO_USER="${FORGEJO_USER:-forgejo_admin}"
 FORGEJO_PASS="${FORGEJO_PASS:-Forgejo12345}"
 FORGEJO_REPO_NAME="${FORGEJO_REPO_NAME:-gitops-argocd-infra}"
 HARBOR_ADMIN_PASSWORD="${HARBOR_ADMIN_PASSWORD:-Harbor12345}"
+ZABBIX_HOST="${ZABBIX_HOST:-zabbix.${MAIN_DOMAIN:-chetan.local}}"
+ZABBIX_SRV_HOST="${ZABBIX_SRV_HOST:-zbx-srv.${MAIN_DOMAIN:-chetan.local}}"
+ZABBIX_PROXY_HOST="${ZABBIX_PROXY_HOST:-zbx-proxy.${MAIN_DOMAIN:-chetan.local}}"
+ZABBIX_NAMESPACE="${ZABBIX_NAMESPACE:-zabbix}"
+ZABBIX_USER="${ZABBIX_ADMIN_USER:-Admin}"
+ZABBIX_PASS="${ZABBIX_ADMIN_PASSWORD:-zabbix}"
 
 # Parse optional arguments
 FAILED_STEP=""
@@ -142,10 +148,31 @@ echo "   Password:    ${HARBOR_ADMIN_PASSWORD}"
 echo "   Docker CLI:  docker login ${HARBOR_HOST} -u admin -p ${HARBOR_ADMIN_PASSWORD}"
 
 # ------------------------------------------------------------------------------
-# 4. Traefik Gateway API
+# 4. Zabbix Monitoring Platform
 # ------------------------------------------------------------------------------
 echo ""
-echo "🚦 4. TRAEFIK GATEWAY API"
+echo "📊 4. ZABBIX (Monitoring Platform v7.4.15 & TimescaleDB)"
+echo "   -----------------------------------------------------------------------------"
+if [[ ${K8S_ONLINE} -eq 1 ]] && kubectl get deployment zabbix-zabbix-web -n "${ZABBIX_NAMESPACE}" >/dev/null 2>&1; then
+  ZABBIX_POD_STATUS=$(kubectl get pods -n "${ZABBIX_NAMESPACE}" -l app.kubernetes.io/name=zabbix,app.kubernetes.io/component=web -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "Unknown")
+  echo "   Status:      🟢 Ready (${ZABBIX_POD_STATUS})"
+else
+  echo "   Status:      ⚪ Not yet running / not installed"
+fi
+echo "   Web UI:      https://${ZABBIX_HOST}"
+echo "   Server FQDN: ${ZABBIX_SRV_HOST} (In-cluster: zabbix-zabbix-server:10051)"
+echo "   Proxy FQDN:  ${ZABBIX_PROXY_HOST} (In-cluster: zabbix-zabbix-proxy:10051, SQLite3)"
+echo "   Username:    ${ZABBIX_USER}"
+echo "   Password:    ${ZABBIX_PASS}"
+echo "   Database:    TimescaleDB (timescale/timescaledb:2.17.2-pg16)"
+echo "   SNMP Traps:  UDP Port 162 (zabbix-snmptraps)"
+echo "   Agent:       Zabbix Agent 2 (DaemonSet on all nodes)"
+
+# ------------------------------------------------------------------------------
+# 5. Traefik Gateway API
+# ------------------------------------------------------------------------------
+echo ""
+echo "🚦 5. TRAEFIK GATEWAY API"
 echo "   -----------------------------------------------------------------------------"
 if [[ ${K8S_ONLINE} -eq 1 ]] && kubectl get gateway main-gateway -n default >/dev/null 2>&1; then
   ROUTE_COUNT=$(kubectl get httproute -A --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo "0")
@@ -155,17 +182,17 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 5. Local Hosts / DNS Entry Requirement
+# 6. Local Hosts / DNS Entry Requirement
 # ------------------------------------------------------------------------------
 echo ""
-echo "🌐 5. LOCAL DNS / HOSTS RESOLUTION"
+echo "🌐 6. LOCAL DNS / HOSTS RESOLUTION"
 echo "   -----------------------------------------------------------------------------"
 echo "   Ensure local domains resolve to 127.0.0.1:"
 echo "   • Windows (Run PowerShell as Administrator):"
-echo "     Add-Content -Path C:\\Windows\\System32\\drivers\\etc\\hosts -Value \"127.0.0.1 ${ARGOCD_HOST} ${FORGEJO_HOST} ${HARBOR_HOST}\""
+echo "     Add-Content -Path C:\\Windows\\System32\\drivers\\etc\\hosts -Value \"127.0.0.1 ${ARGOCD_HOST} ${FORGEJO_HOST} ${HARBOR_HOST} ${ZABBIX_HOST} ${ZABBIX_SRV_HOST} ${ZABBIX_PROXY_HOST}\""
 echo ""
 echo "   • Linux / macOS:"
-echo "     echo \"127.0.0.1 ${ARGOCD_HOST} ${FORGEJO_HOST} ${HARBOR_HOST}\" | sudo tee -a /etc/hosts"
+echo "     echo \"127.0.0.1 ${ARGOCD_HOST} ${FORGEJO_HOST} ${HARBOR_HOST} ${ZABBIX_HOST} ${ZABBIX_SRV_HOST} ${ZABBIX_PROXY_HOST}\" | sudo tee -a /etc/hosts"
 
 # ------------------------------------------------------------------------------
 # 6. Applications & Workloads

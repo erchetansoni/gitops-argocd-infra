@@ -43,15 +43,21 @@ $MainDomain = if ($env:MAIN_DOMAIN) { $env:MAIN_DOMAIN } else { "chetan.local" }
 $ArgoCdHost = if ($env:ARGOCD_HOST) { $env:ARGOCD_HOST } else { "argocd.$MainDomain" }
 $ForgejoHost = if ($env:FORGEJO_HOST) { $env:FORGEJO_HOST } else { "git.$MainDomain" }
 $HarborHost = if ($env:HARBOR_HOST) { $env:HARBOR_HOST } else { "cr.$MainDomain" }
+$ZabbixHost = if ($env:ZABBIX_HOST) { $env:ZABBIX_HOST } else { "zabbix.$MainDomain" }
+$ZabbixSrvHost = if ($env:ZABBIX_SRV_HOST) { $env:ZABBIX_SRV_HOST } else { "zbx-srv.$MainDomain" }
+$ZabbixProxyHost = if ($env:ZABBIX_PROXY_HOST) { $env:ZABBIX_PROXY_HOST } else { "zbx-proxy.$MainDomain" }
 
 $ArgoCdNs = if ($env:ARGOCD_NAMESPACE) { $env:ARGOCD_NAMESPACE } else { "argocd" }
 $ForgejoNs = if ($env:FORGEJO_NAMESPACE) { $env:FORGEJO_NAMESPACE } else { "forgejo" }
 $HarborNs = if ($env:HARBOR_NAMESPACE) { $env:HARBOR_NAMESPACE } else { "harbor" }
+$ZabbixNs = if ($env:ZABBIX_NAMESPACE) { $env:ZABBIX_NAMESPACE } else { "zabbix" }
 
 $ForgejoUser = if ($env:FORGEJO_USER) { $env:FORGEJO_USER } else { "forgejo_admin" }
 $ForgejoPass = if ($env:FORGEJO_PASS) { $env:FORGEJO_PASS } else { "Forgejo12345" }
 $ForgejoRepo = if ($env:FORGEJO_REPO_NAME) { $env:FORGEJO_REPO_NAME } else { "gitops-argocd-infra" }
 $HarborPass = if ($env:HARBOR_ADMIN_PASSWORD) { $env:HARBOR_ADMIN_PASSWORD } else { "Harbor12345" }
+$ZabbixUser = if ($env:ZABBIX_ADMIN_USER) { $env:ZABBIX_ADMIN_USER } else { "Admin" }
+$ZabbixPass = if ($env:ZABBIX_ADMIN_PASSWORD) { $env:ZABBIX_ADMIN_PASSWORD } else { "zabbix" }
 
 # Check cluster reachability
 $K8sOnline = $false
@@ -130,8 +136,26 @@ Write-Host "   Username:    admin"
 Write-Host "   Password:    $HarborPass"
 Write-Host "   Docker CLI:  docker login $HarborHost -u admin -p $HarborPass"
 
-# 4. Traefik Gateway
-Write-Host "`n🚦 4. TRAEFIK GATEWAY API" -ForegroundColor Cyan
+# 4. Zabbix
+Write-Host "`n📊 4. ZABBIX (Monitoring Platform v7.4.15 & TimescaleDB)" -ForegroundColor Cyan
+Write-Host "   -----------------------------------------------------------------------------"
+$ZabbixStatus = "⚪ Not yet running / not installed"
+if ($K8sOnline) {
+    $zPhase = kubectl get pods -n $ZabbixNs -l app.kubernetes.io/name=zabbix,app.kubernetes.io/component=web -o jsonpath='{.items[0].status.phase}' 2>$null
+    if ($zPhase) { $ZabbixStatus = "🟢 Ready ($zPhase)" }
+}
+Write-Host "   Status:      $ZabbixStatus"
+Write-Host "   Web UI:      https://$ZabbixHost"
+Write-Host "   Server FQDN: $ZabbixSrvHost (In-cluster: zabbix-zabbix-server:10051)"
+Write-Host "   Proxy FQDN:  $ZabbixProxyHost (In-cluster: zabbix-zabbix-proxy:10051, SQLite3)"
+Write-Host "   Username:    $ZabbixUser"
+Write-Host "   Password:    $ZabbixPass"
+Write-Host "   Database:    TimescaleDB (timescale/timescaledb:2.17.2-pg16)"
+Write-Host "   SNMP Traps:  UDP Port 162 (zabbix-snmptraps)"
+Write-Host "   Agent:       Zabbix Agent 2 (DaemonSet on all nodes)"
+
+# 5. Traefik Gateway
+Write-Host "`n🚦 5. TRAEFIK GATEWAY API" -ForegroundColor Cyan
 Write-Host "   -----------------------------------------------------------------------------"
 $GwStatus = "⚪ Not yet ready"
 if ($K8sOnline) {
@@ -143,15 +167,15 @@ if ($K8sOnline) {
 }
 Write-Host "   Gateway:     $GwStatus"
 
-# 5. DNS / Hosts
-Write-Host "`n🌐 5. LOCAL DNS / HOSTS RESOLUTION" -ForegroundColor Cyan
+# 6. DNS / Hosts
+Write-Host "`n🌐 6. LOCAL DNS / HOSTS RESOLUTION" -ForegroundColor Cyan
 Write-Host "   -----------------------------------------------------------------------------"
 Write-Host "   Ensure local domains resolve to 127.0.0.1:"
 Write-Host "   • Windows (Run PowerShell as Administrator):"
-Write-Host "     Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value `"127.0.0.1 $ArgoCdHost $ForgejoHost $HarborHost`"" -ForegroundColor Yellow
+Write-Host "     Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value `"127.0.0.1 $ArgoCdHost $ForgejoHost $HarborHost $ZabbixHost $ZabbixSrvHost $ZabbixProxyHost`"" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "   • Linux / macOS:"
-Write-Host "     echo `"127.0.0.1 $ArgoCdHost $ForgejoHost $HarborHost`" | sudo tee -a /etc/hosts" -ForegroundColor Yellow
+Write-Host "     echo `"127.0.0.1 $ArgoCdHost $ForgejoHost $HarborHost $ZabbixHost $ZabbixSrvHost $ZabbixProxyHost`" | sudo tee -a /etc/hosts" -ForegroundColor Yellow
 
 # 6. Applications
 if ($K8sOnline) {

@@ -1,0 +1,190 @@
+# ==============================================================================
+# Zabbix Monitoring Platform - Helm Values Configuration
+# ==============================================================================
+# Includes: Zabbix Server (v7.4.15 pgsql), Zabbix Web UI (v7.4.15 nginx-pgsql),
+#           Zabbix Proxy (v7.4.15 sqlite3), Zabbix SNMP Traps (v7.4.15),
+#           Zabbix Agent 2 (v7.4.15 DaemonSet), and TimescaleDB 2.17.2 (PG16)
+# ==============================================================================
+
+zabbixImageTag: "alpine-7.4.15"
+
+# ------------------------------------------------------------------------------
+# 1. Unified PostgreSQL / TimescaleDB Access Configuration
+# ------------------------------------------------------------------------------
+postgresAccess:
+  host: "zabbix-postgresql"
+  port: "5432"
+  user: "zabbix"
+  password: "Zabbix12345"
+  database: "zabbix"
+
+# ------------------------------------------------------------------------------
+# 2. TimescaleDB Time-Series Database Backend
+# ------------------------------------------------------------------------------
+postgresql:
+  enabled: true
+  image:
+    repository: timescale/timescaledb
+    tag: "2.17.2-pg16"
+    pullPolicy: IfNotPresent
+  max_connections: 150
+  persistence:
+    enabled: true
+    storageSize: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# ------------------------------------------------------------------------------
+# 3. Zabbix Server (v7.4.15 with TimescaleDB & SNMP Trapper Sidecar)
+# ------------------------------------------------------------------------------
+zabbixServer:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: zabbix/zabbix-server-pgsql
+    tag: "alpine-7.4.15"
+    pullPolicy: IfNotPresent
+  zabbixServerHA:
+    enabled: false
+  haNodesAutoClean:
+    enabled: false
+  service:
+    type: ClusterIP
+    port: 10051
+  extraEnv:
+    - name: ENABLE_TIMESCALEDB
+      value: "true"
+    - name: ZBX_DBEXTENDEDSTATUS
+      value: "1"
+    - name: ZBX_STARTSNMPTRAPPERS
+      value: "1"
+    - name: ZBX_STARTPOLLERS
+      value: "5"
+    - name: ZBX_STARTTRAPPERS
+      value: "5"
+  extraContainers:
+    - name: zabbix-snmptraps
+      image: "zabbix/zabbix-snmptraps:alpine-7.4.15"
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: snmptraps
+          containerPort: 1162
+          protocol: UDP
+      volumeMounts:
+        - name: snmptraps-dir
+          mountPath: /var/lib/zabbix/snmptraps
+  extraVolumes:
+    - name: snmptraps-dir
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: snmptraps-dir
+      mountPath: /var/lib/zabbix/snmptraps
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# ------------------------------------------------------------------------------
+# 4. Zabbix Web UI (Nginx + PostgreSQL v7.4.15)
+# ------------------------------------------------------------------------------
+zabbixWeb:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: zabbix/zabbix-web-nginx-pgsql
+    tag: "alpine-7.4.15"
+    pullPolicy: IfNotPresent
+  ZBX_SERVER_HOST: zabbix-zabbix-server
+  ZBX_SERVER_PORT: 10051
+  service:
+    type: ClusterIP
+    port: 80
+  extraEnv:
+    - name: ZBX_DBEXTENDEDSTATUS
+      value: "1"
+    - name: PHP_TZ
+      value: "UTC"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+# ------------------------------------------------------------------------------
+# 5. Zabbix Proxy (SQLite3 Engine v7.4.15)
+# ------------------------------------------------------------------------------
+zabbixProxy:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: zabbix/zabbix-proxy-sqlite3
+    tag: "alpine-7.4.15"
+    pullPolicy: IfNotPresent
+  ZBX_PROXYMODE: 0 # Active proxy
+  ZBX_HOSTNAME: "zbx-proxy"
+  ZBX_SERVER_HOST: zabbix-zabbix-server
+  ZBX_SERVER_PORT: 10051
+  service:
+    type: ClusterIP
+    port: 10051
+  persistentVolume:
+    enabled: true
+    size: 2Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+# ------------------------------------------------------------------------------
+# 6. Zabbix Agent 2 (Kubernetes Node Monitoring DaemonSet v7.4.15)
+# ------------------------------------------------------------------------------
+zabbixAgent:
+  enabled: true
+  runAsSidecar: false
+  runAsDaemonSet: true
+  image:
+    repository: zabbix/zabbix-agent2
+    tag: "alpine-7.4.15"
+    pullPolicy: IfNotPresent
+  ZBX_SERVER_HOST: "zabbix-zabbix-server"
+  ZBX_SERVER_PORT: 10051
+  ZBX_PASSIVE_ALLOW: true
+  ZBX_ACTIVE_ALLOW: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+# ------------------------------------------------------------------------------
+# 7. Additional Manifests (SNMP Traps UDP Service)
+# ------------------------------------------------------------------------------
+extraManifests:
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: zabbix-snmptraps
+      namespace: zabbix
+      labels:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: snmptraps
+    spec:
+      type: ClusterIP
+      selector:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: server
+      ports:
+        - name: snmptraps-udp
+          port: 162
+          targetPort: 1162
+          protocol: UDP
