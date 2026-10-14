@@ -218,7 +218,7 @@ bash 03-cert-manager/install-cert-manager.sh
 
 ## GitOps Adoption
 
-cert-manager is declared under [05-infra-apps/infra-apps-root.yaml](../05-infra-apps/infra-apps-root.yaml) and automatically adopted into Argo CD when running:
+cert-manager is declared under [05-infra-apps/platform-apps.yaml](../05-infra-apps/platform-apps.yaml) and automatically adopted into Argo CD when running:
 
 ```bash
 bash 06-argocd/02-adopt-infra-apps.sh

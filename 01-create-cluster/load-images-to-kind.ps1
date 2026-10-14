@@ -137,12 +137,16 @@ $missingImages = @()
 
 foreach ($img in $images) {
     $stripped = $img -replace '^docker\.io/', ''
+    $strippedLib = $stripped -replace '^library/', ''
     if ($localImages -contains $img) {
         $presentImages += $img
         if ($ListOnly) { Write-Host "  [+] Present: $img" -ForegroundColor Green }
     } elseif ($localImages -contains $stripped) {
         $presentImages += $stripped
         if ($ListOnly) { Write-Host "  [+] Present: $stripped (matches $img)" -ForegroundColor Green }
+    } elseif ($localImages -contains $strippedLib) {
+        $presentImages += $strippedLib
+        if ($ListOnly) { Write-Host "  [+] Present: $strippedLib (matches $img)" -ForegroundColor Green }
     } else {
         $missingImages += $img
         if ($ListOnly) { Write-Host "  [-] Missing: $img" -ForegroundColor Red }

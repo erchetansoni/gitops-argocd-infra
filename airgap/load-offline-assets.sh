@@ -12,8 +12,16 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TAR_FILE="${SCRIPT_DIR}/airgap-images.tar"
-K3S_IMAGES_DIR="/var/lib/rancher/k3s/agent/images"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
+TAR_FILE="${AIRGAP_TAR_OUTPUT:-${TAR_FILE:-${SCRIPT_DIR}/airgap-images.tar}}"
+K3S_IMAGES_DIR="${K3S_IMAGES_DIR:-/var/lib/rancher/k3s/agent/images}"
 
 SKIP_CLEAN=false
 CLEAN_SOURCE=false

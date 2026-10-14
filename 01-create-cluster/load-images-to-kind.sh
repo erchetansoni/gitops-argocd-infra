@@ -12,12 +12,20 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-IMAGES_FILE="${REPO_ROOT}/airgap/images.yaml"
+IMAGES_FILE="${IMAGES_FILE:-${REPO_ROOT}/airgap/images.yaml}"
 CONFIG_FILE="${SCRIPT_DIR}/kind-cluster-config.yaml"
 
 # Default cluster name
-DEFAULT_CLUSTER="gitops-demo-cluster"
+DEFAULT_CLUSTER="${DEFAULT_CLUSTER:-gitops-demo-cluster}"
 if [[ -f "${CONFIG_FILE}" ]]; then
   cfg_name="$(grep -E '^[[:space:]]*name:' "${CONFIG_FILE}" | head -n 1 | awk '{print $2}' || true)"
   [[ -n "$cfg_name" ]] && DEFAULT_CLUSTER="$cfg_name"
@@ -180,12 +188,16 @@ missing_images=()
 
 for img in "${images[@]}"; do
   stripped_img="${img#docker.io/}"
+  stripped_lib="${stripped_img#library/}"
   if echo "${local_images}" | grep -Fxq "${img}"; then
     present_images+=("$img")
     [[ "${LIST_ONLY}" == "true" ]] && echo "  ✅ Present:  $img"
   elif echo "${local_images}" | grep -Fxq "${stripped_img}"; then
     present_images+=("$stripped_img")
     [[ "${LIST_ONLY}" == "true" ]] && echo "  ✅ Present:  $stripped_img (matches $img)"
+  elif echo "${local_images}" | grep -Fxq "${stripped_lib}"; then
+    present_images+=("$stripped_lib")
+    [[ "${LIST_ONLY}" == "true" ]] && echo "  ✅ Present:  $stripped_lib (matches $img)"
   else
     missing_images+=("$img")
     [[ "${LIST_ONLY}" == "true" ]] && echo "  ❌ Missing:  $img"

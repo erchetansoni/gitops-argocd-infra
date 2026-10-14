@@ -64,7 +64,7 @@ The installation script [install-forgejo-runner.sh](install-forgejo-runner.sh) a
 
 ## Argo CD GitOps Management
 
-Forgejo Runner is declared in [infra-apps-root.yaml](../infra-apps-root.yaml) under `sync-wave: "3"`.
+Forgejo Runner is declared in [platform-apps.yaml](../platform-apps.yaml) under `sync-wave: "3"`.
 Because `sync-wave: "3"` executes after Forgejo (`sync-wave: "2"`), Forgejo is fully operational before the runner synchronizes.
 
 Verify Argo CD application status:

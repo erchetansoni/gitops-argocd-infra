@@ -38,13 +38,31 @@ This guide details how to migrate and deploy this entire GitOps platform from lo
 | Component | Online Source | Air-Gap Offline Source |
 | :--- | :--- | :--- |
 | **K3s Binary & Images** | `get.k3s.io` | `k3s` binary + `k3s-airgap-images-amd64.tar.zst` |
-| **Container Images** | Docker Hub, Quay, GHCR, k8s.io | `airgap/airgap-images.tar` (imported into K3s containerd) |
+| **Container Images** | Docker Hub, Quay, GHCR, k8s.io | `airgap/airgap-images.tar` (imported into containerd) |
 | **Gateway API CRDs** | `github.com/.../standard-install.yaml` | `02-traefik-controller/k8s-gateway-api-crd-v1.6.2-install.yaml` |
-| **Traefik Helm Chart** | `https://traefik.github.io/charts` | `02-traefik-controller/traefik-41.6.0.tgz` |
-| **cert-manager Chart** | `https://charts.jetstack.io` | `03-cert-manager/cert-manager-v1.21.2.tgz` |
-| **Metrics Server Chart**| `https://kubernetes-sigs.github.io/...` | `05-infra-apps/02-metrics-server/metrics-server-3.14.0.tgz` |
+| **Traefik Helm Chart** | `https://traefik.github.io/charts` | `airgap/charts/traefik-41.6.0.tgz` |
+| **cert-manager Chart** | `https://charts.jetstack.io` | `airgap/charts/cert-manager-v1.21.2.tgz` |
+| **Metrics Server Chart**| `https://kubernetes-sigs.github.io/...` | `airgap/charts/metrics-server-3.14.0.tgz` |
+| **Harbor Registry Chart**| `https://helm.goharbor.io` | `airgap/charts/harbor-1.19.2.tgz` |
+| **Forgejo Git Chart** | `oci://code.forgejo.org/...` | `airgap/charts/forgejo-17.2.0.tgz` |
+| **Forgejo Runner Chart**| `oci://codeberg.org/...` | `airgap/charts/forgejo-runner-0.7.6.tgz` |
 | **Argo CD Manifest** | `raw.githubusercontent.com/...` | `06-argocd/argocd-install-v3.5.3.yaml` |
-| **Argo CD Helm Repo** | Public chart repos (`traefik.github.io`, etc.) | In-cluster service `http://airgap-helm-repo.argocd.svc:8080` |
+| **GitOps Git Source** | `github.com/erchetansoni/...` | In-cluster Forgejo `http://forgejo-http.forgejo.svc.cluster.local:3000/...` |
+| **Platform Helm Repo** | Public chart repos (`traefik.github.io`, etc.) | In-cluster service `http://airgap-helm-repo.argocd.svc:8080` |
+
+---
+
+### ❓ Why `http://airgap-helm-repo.argocd.svc:8080` Instead of Harbor or Forgejo?
+
+When operating offline, Argo CD cannot resolve public Helm URLs (`traefik.github.io`, `helm.goharbor.io`). A common question is: *Why not serve the offline charts from internal Harbor or Forgejo?*
+
+1. **Avoids the Harbor Circular Dependency ("Chicken-and-Egg")**:
+   Harbor is one of the applications being deployed! If Harbor's chart is stored inside Harbor, and Harbor crashes or is restarting during an upgrade, Argo CD **could not even download the Harbor Helm chart to repair it**. `airgap-helm-repo` is completely independent.
+2. **Zero Authentication Protocol Matching**:
+   Public Helm repositories use unauthenticated HTTP `GET` requests (`index.yaml` + `*.tgz`). `airgap-helm-repo` replicates this exact behavior over internal HTTP port 8080 with **zero tokens, passwords, or certificate verifications**. Harbor requires OCI login credentials, and Forgejo requires Git/Package tokens.
+3. **Stateless & Instant Boot**:
+   `airgap-helm-repo` is a 5MB static micro-webserver backed directly by a Kubernetes Secret (`airgap-helm-charts`) populated from `airgap/charts/*.tgz`. It has **no database, no persistent volumes**, and boots in under 1 second.
+
 
 ---
 
@@ -226,7 +244,7 @@ In an air-gapped environment, Argo CD cannot clone from `github.com`.
    http://gitea.local:3000/devops/gitops-argocd-apps.git
    ```
 
-2. **Update [07-apps/.env](file:///c:/Projects/My_Projects/gitops-argocd-infra/07-apps/.env)**:
+2. **Update [.env](file:///c:/Projects/My_Projects/gitops-argocd-infra/.env)** at repository root:
    ```env
    REPO_URL="http://gitea.local:3000/devops/gitops-argocd-apps.git"
    GITHUB_USERNAME="your-git-user"
@@ -311,4 +329,154 @@ When you need to reclaim disk space by deleting local container image tarballs (
 # Or use the shortcut:
 ./airgap/clean-offline-assets.sh
 ```
+
+---
+
+## 🔄 Day-2 Lifecycle Operations: Adding Apps & Disconnecting Internet
+
+### 1. Adding a New Platform/Infra App in Online Mode
+
+Adding a new platform app (e.g. Prometheus, Vault, Loki) when connected to the internet is straightforward:
+
+1. **Add to [05-infra-apps/platform-apps.yaml](../05-infra-apps/platform-apps.yaml)**:
+   Append a new `Application` block under `items:`:
+   ```yaml
+   - apiVersion: argoproj.io/v1alpha1
+     kind: Application
+     metadata:
+       name: prometheus
+       namespace: argocd
+       annotations:
+         argocd.argoproj.io/sync-wave: "2"
+     spec:
+       project: default
+       source:
+         repoURL: https://prometheus-community.github.io/helm-charts
+         chart: kube-prometheus-stack
+         targetRevision: 69.3.0
+         helm:
+           valuesObject:
+             # Custom Helm values
+       destination:
+         server: https://kubernetes.default.svc
+         namespace: monitoring
+       syncPolicy:
+         automated:
+           prune: false
+           selfHeal: true
+         syncOptions:
+           - CreateNamespace=true
+           - ServerSideApply=true
+   ```
+2. **Commit and Push**:
+   ```bash
+   git add 05-infra-apps/platform-apps.yaml
+   git commit -m "feat(infra): add prometheus monitoring stack"
+   git push forgejo main
+   ```
+3. **Argo CD reconciles automatically**: The root `infra-apps` Application detects the new child application in Forgejo Git and deploys Prometheus into Kubernetes.
+
+---
+
+### 2. Adding a New Platform/Infra App in Air-Gap Mode
+
+In a disconnected environment, Argo CD cannot download charts from the internet, and Kubernetes cannot pull images from Docker Hub. You must package the assets on an internet-connected workstation first:
+
+#### Step A: On the Connected Machine (Asset Preparation)
+1. **Download the Helm Chart package**:
+   ```bash
+   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+   helm pull prometheus-community/kube-prometheus-stack --version 69.3.0 -d airgap/charts/
+   ```
+2. **Re-generate the local chart repository index**:
+   ```bash
+   helm repo index airgap/charts/
+   ```
+3. **Identify & Export Container Images**:
+   Render the chart templates to discover all required images:
+   ```bash
+   helm template airgap/charts/kube-prometheus-stack-69.3.0.tgz | grep -E 'image:\s*"?([^"[:space:]]+)'
+   ```
+   Add these image strings to `airgap/images.yaml`, pull them, and export to tarball:
+   ```bash
+   docker pull prom/prometheus:v3.2.0
+   docker save prom/prometheus:v3.2.0 -o new-app-images.tar
+   ```
+
+#### Step B: In the Air-Gap Environment (Import & Deploy)
+1. **Load Images into Kubernetes Node containerd** (or push to in-cluster Harbor `cr.chetan.local`):
+   ```bash
+   # KinD:
+   kind load image-archive new-app-images.tar --name gitops-demo-cluster
+   # Or K3s:
+   sudo k3s ctr images import new-app-images.tar
+   ```
+2. **Update the in-cluster Chart Secret**:
+   Re-apply the `airgap-helm-charts` Secret with the newly added `.tgz` file:
+   ```bash
+   kubectl create secret generic airgap-helm-charts \
+     --from-file=airgap/charts/ \
+     -n argocd --dry-run=client -o yaml | kubectl apply -f -
+   ```
+3. **Declare the Application with Internal `repoURL`**:
+   In [05-infra-apps/platform-apps.yaml](../05-infra-apps/platform-apps.yaml), specify the internal chart repo:
+   ```yaml
+   source:
+     repoURL: http://airgap-helm-repo.argocd.svc:8080   # <-- Internal offline server
+     chart: kube-prometheus-stack
+     targetRevision: 69.3.0
+   ```
+4. **Push to Forgejo**:
+   ```bash
+   git add 05-infra-apps/platform-apps.yaml
+   git commit -m "feat(infra): add prometheus in airgap mode"
+   git push forgejo main
+   ```
+
+---
+
+### 3. What if You Bootstrap with Internet Mode, but LATER Disconnect Internet?
+
+This is a common enterprise pattern: **provisioning a cluster in a staging lab with internet access, then shipping it to a disconnected customer site or air-gapped production**.
+
+#### What keeps working automatically with ZERO changes:
+1. **All Active Pods**: Running containers keep running without interruption.
+2. **Pod Restarts / Node Reboots**: Because all manifests declare explicit version tags (e.g. `:v3.7.13`), containerd caches them locally with `imagePullPolicy: IfNotPresent`. Node reboots will restart pods cleanly without network access.
+3. **In-Cluster GitOps**: Developers push to Forgejo (`git push forgejo main`), and Argo CD polls `http://forgejo-http.forgejo.svc.cluster.local:3000` 100% internally.
+
+#### The ONE component that needs transition:
+* In online mode, [platform-apps.yaml](../05-infra-apps/platform-apps.yaml) was committed with **public internet URLs** (`https://traefik.github.io/charts`, `https://helm.goharbor.io`).
+* When the internet is disconnected, Argo CD's periodic 3-minute poll will attempt to check those public URLs for chart updates.
+* It will fail with `ComparisonError: dial tcp ... i/o timeout` (though existing running pods remain untouched).
+
+#### How to "Cut the Cord" (Seamless Transition to Air-Gap):
+To decouple Argo CD from the internet cleanly:
+
+1. **Deploy the in-cluster chart server**:
+   ```bash
+   # Create the chart secret from local airgap/charts/
+   kubectl create secret generic airgap-helm-charts \
+     --from-file=airgap/charts/ \
+     -n argocd --dry-run=client -o yaml | kubectl apply -f -
+
+   # Start the chart web server
+   kubectl apply -f 06-argocd/airgap-helm-repo.yaml -n argocd
+   ```
+2. **Redirect `platform-apps.yaml` to the internal chart server**:
+   In `05-infra-apps/platform-apps.yaml`, change all public `repoURL:` fields to:
+   ```yaml
+   repoURL: http://airgap-helm-repo.argocd.svc:8080
+   ```
+3. **Commit and push to Forgejo**:
+   ```bash
+   git add 05-infra-apps/platform-apps.yaml
+   git commit -m "chore(airgap): switch helm repoURL to in-cluster airgap chart server"
+   git push forgejo main
+   ```
+4. **Trigger Argo CD hard refresh**:
+   ```bash
+   kubectl annotate application infra-apps -n argocd argocd.argoproj.io/refresh=hard --overwrite
+   ```
+Argo CD immediately stops contacting the internet and fetches all charts from `http://airgap-helm-repo.argocd.svc:8080`. The cluster is now permanently 100% autonomous.
+
 

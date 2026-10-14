@@ -10,7 +10,7 @@ In enterprise Kubernetes environments, cluster operations are strictly split int
 1. **Platform / Infra Apps** (this directory): Shared cluster services like Ingress/Gateway controllers, metrics/monitoring, and cert managers managed by the DevOps/Platform team.
 2. **Workload Apps** ([07-apps](../07-apps/README.md)): Tenant application microservices managed by development teams.
 
-All platform components are declared in [infra-apps-root.yaml](infra-apps-root.yaml) and synchronized automatically by Argo CD.
+All platform components are declared in [platform-apps.yaml](platform-apps.yaml) and orchestrated continuously via the App-of-Apps parent [app-of-apps.yaml](app-of-apps.yaml) synced from Forgejo.
 
 ---
 
@@ -95,25 +95,28 @@ All platform components are declared in [infra-apps-root.yaml](infra-apps-root.y
 │   ├── forgejo-application.yaml        # Individual Argo CD Application manifest
 │   ├── forgejo-values.yaml             # Forgejo Helm values (Gateway API HTTPRoute)
 │   ├── install-forgejo.sh              # Pre-install / standalone install script
+│   ├── sync-repo-to-forgejo.sh         # Seeds gitops-argocd-infra repo and configures dual-remote
 │   └── README.md                       # Documentation & Git clone guide
 ├── 05-forgejo-runner/
 │   ├── forgejo-runner-application.yaml # Individual Argo CD Application manifest
 │   ├── forgejo-runner-values.yaml      # Forgejo Runner Helm values (DinD sidecar)
 │   ├── install-forgejo-runner.sh       # Pre-install / standalone install script
 │   └── README.md                       # Documentation & Actions runner guide
-├── infra-apps-root.yaml                # Root Application manifest containing infra apps
+├── app-of-apps.yaml                    # Parent Argo CD Application (App-of-Apps) tracking Forgejo main
+├── platform-apps.yaml                  # Declarative list of all 6 platform child applications
 └── README.md                           # Documentation
 ```
 
 ---
 
-## How Infra Apps Are Adopted by Argo CD
+## How Infra Apps Are Managed (App-of-Apps Pattern)
 
-Instead of manual `helm install` commands drifting over time, the script [06-argocd/02-adopt-infra-apps.sh](../06-argocd/02-adopt-infra-apps.sh) adopts all running components:
+Instead of manual `helm install` commands drifting over time, the platform uses the **GitOps App-of-Apps** pattern:
 
-1. Injects Helm release ownership annotations (`meta.helm.sh/release-name` and `app.kubernetes.io/managed-by: Helm`).
-2. Applies [infra-apps-root.yaml](infra-apps-root.yaml) using Server-Side Apply (`ServerSideApply=true`).
-3. Argo CD automatically assumes declarative control without terminating running pods.
+1. **Child Applications List** (`platform-apps.yaml`): Declares the desired configuration, charts, and values for all 6 infrastructure apps.
+2. **Parent Orchestrator** (`app-of-apps.yaml`): A top-level Argo CD Application (`metadata.name: infra-apps`) that continuously watches the in-cluster Forgejo repository on branch `main`.
+3. **Adoption**: The script [06-argocd/02-adopt-infra-apps.sh](../06-argocd/02-adopt-infra-apps.sh) injects Helm ownership annotations and applies [platform-apps.yaml](platform-apps.yaml) via Server-Side Apply.
+4. **Continuous Sync**: When [06-argocd/03-configure-forgejo-repo.sh](../06-argocd/03-configure-forgejo-repo.sh) applies [app-of-apps.yaml](app-of-apps.yaml), Argo CD establishes a live GitOps feedback loop. Any commit pushed to Forgejo `main` automatically updates the cluster.
 
 ---
 
@@ -122,7 +125,14 @@ Instead of manual `helm install` commands drifting over time, the script [06-arg
 Check the Argo CD status of infra apps:
 
 ```bash
-kubectl get applications -n argocd traefik-gateway-controller metrics-server cert-manager harbor
+kubectl get applications -n argocd
+# Output:
+# traefik-gateway-controller   Synced   Healthy
+# metrics-server               Synced   Healthy
+# cert-manager                 Synced   Healthy
+# harbor                       Synced   Healthy
+# forgejo                      Synced   Healthy
+# forgejo-runner               Synced   Healthy
 ```
 
 Verify that Metrics Server is working:
@@ -138,6 +148,51 @@ Verify cert-manager deployments:
 kubectl get deployment -n cert-manager
 kubectl get crd -l app.kubernetes.io/name=cert-manager
 ```
+
+---
+
+## 🛠️ How to Upgrade, Downgrade, or Adjust Any Platform App
+
+With the **App-of-Apps** orchestrator in place, you **never** run manual `helm upgrade` or `kubectl apply` commands. Everything is driven by Git pushes to your in-cluster Forgejo repository:
+
+### The 3-Step Modification Workflow:
+
+1. **Edit `platform-apps.yaml` locally**:
+   * *To upgrade/downgrade an app*: Change `targetRevision` under the app's `source:` block (e.g., change `targetRevision: 3.14.0` to `3.13.0` for `metrics-server`).
+   * *To adjust Helm values*: Edit the `valuesObject:` section (e.g., change replicas, memory/CPU requests, or log levels).
+2. **Commit and push to Forgejo**:
+   ```bash
+   git add 05-infra-apps/platform-apps.yaml
+   git commit -m "chore: upgrade metrics-server to 3.14.0"
+   git push forgejo main
+   ```
+### Adding a Brand New Infrastructure Application:
+
+* **In Online Mode**: Append a new `Application` block under `items:` in [platform-apps.yaml](platform-apps.yaml) with the official public `repoURL: https://...`, then `git push forgejo main`. Argo CD deploys it instantly.
+* **In Air-Gap Mode**: First download the `.tgz` package into `airgap/charts/`, import the container images, update the `airgap-helm-charts` Secret, and set `repoURL: http://airgap-helm-repo.argocd.svc:8080`.
+* **Disconnecting Internet Post-Bootstrap**: For a detailed walkthrough on taking an online cluster completely offline without errors, see [airgap/README.md#3-what-if-you-bootstrap-with-internet-mode-but-later-disconnect-internet](../airgap/README.md#3-what-if-you-bootstrap-with-internet-mode-but-later-disconnect-internet).
+
+---
+
+## 🛡️ Self-Healing & Drift Detection in Action
+
+Every platform application has `selfHeal: true` configured:
+
+```yaml
+syncPolicy:
+  automated:
+    prune: false
+    selfHeal: true
+```
+
+### What happens if a resource is deleted or modified manually?
+If an engineer or automated script deletes a resource directly:
+```bash
+kubectl delete deployment metrics-server -n kube-system
+```
+1. Argo CD's application controller detects a discrepancy between the cluster state (`NotFound`) and the desired state declared in Git.
+2. Within seconds, Argo CD triggers an automated **Self-Heal**.
+3. It re-applies the missing manifest, and the pods restart automatically. Manual tampering or accidental deletion is immediately corrected.
 
 ---
 

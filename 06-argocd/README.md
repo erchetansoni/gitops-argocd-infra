@@ -17,11 +17,12 @@ Argo CD automates the deployment of the desired application states declared in G
 
 ```
 06-argocd/
-├── 01-install-argocd.sh         # Installs Argo CD, applies configs, and prints admin password
-├── 02-adopt-infra-apps.sh       # Adopts Traefik, Metrics Server, and cert-manager into Argo CD management
-├── argocd-configmaps.yaml       # ConfigMaps: argocd-cm and argocd-cmd-params-cm
-├── argocd-httproute.yaml        # Gateway API HTTPRoute for argocd.chetan.local
-└── README.md                    # Documentation
+├── 01-install-argocd.sh           # Installs Argo CD, applies configs, and prints admin password
+├── 02-adopt-infra-apps.sh         # Adopts Traefik, Metrics Server, cert-manager, Harbor, and Forgejo
+├── 03-configure-forgejo-repo.sh   # Configures in-cluster Forgejo repo secret in Argo CD
+├── argocd-configmaps.yaml         # ConfigMaps: argocd-cm and argocd-cmd-params-cm
+├── argocd-httproute.yaml          # Gateway API HTTPRoute for argocd.chetan.local
+└── README.md                      # Documentation
 ```
 
 ---
@@ -74,7 +75,69 @@ This will:
 ```bash
 bash 06-argocd/02-adopt-infra-apps.sh
 ```
-Takes pre-installed infrastructure applications (Traefik, Metrics Server, and cert-manager) and brings them under Argo CD GitOps management without terminating running pods.
+Takes pre-installed infrastructure applications (Traefik, Metrics Server, cert-manager, Harbor, Forgejo, and Forgejo Runner) and brings them under Argo CD GitOps management without terminating running pods.
+
+### Step 3: Configure In-Cluster Forgejo Repository Credentials & Deploy App-of-Apps
+```bash
+bash 06-argocd/03-configure-forgejo-repo.sh
+```
+1. Creates `Secret/forgejo-infra-repo-secret` labeled `argocd.argoproj.io/secret-type: repository`. Argo CD can now directly access `http://forgejo-http.forgejo.svc.cluster.local:3000/forgejo_admin/gitops-argocd-infra.git` for ultra-fast, offline, in-cluster GitOps synchronization.
+2. Automatically deploys [05-infra-apps/app-of-apps.yaml](../05-infra-apps/app-of-apps.yaml), establishing the top-level GitOps orchestrator watching Forgejo `main`.
+
+---
+
+## 📦 Air-Gap Architecture: Why `airgap-helm-repo` Instead of Harbor or Forgejo?
+
+In [02-adopt-infra-apps.sh](02-adopt-infra-apps.sh#L70-L103), when `INSTALL_MODE=airgap`, the script dynamically launches an in-cluster web server at `http://airgap-helm-repo.argocd.svc:8080` and rewrites the `repoURL` of all platform applications:
+
+```text
+[ Online Mode ]   repoURL: https://traefik.github.io/charts (Outbound Internet)
+                         │ (Air-gap rewrite)
+                         ▼
+[ Air-Gap Mode ]  repoURL: http://airgap-helm-repo.argocd.svc:8080 (In-Cluster Internal)
+```
+
+### Why is this necessary?
+In an air-gapped cluster with no internet route, Argo CD's `repo-server` cannot resolve or download chart tarballs from `github.io` or `goharbor.io`. If left pointing to public URLs, sync fails with `ComparisonError: dial tcp ... i/o timeout`.
+
+### Why use `airgap-helm-repo` instead of in-cluster Harbor or Forgejo?
+
+1. **Avoids the Harbor Circular Dependency ("Chicken-and-Egg")**:
+   Harbor is one of the 6 applications being managed by Argo CD! If Harbor's Helm chart is hosted inside Harbor, and Harbor crashes or is restarting during an upgrade, Argo CD **could not even download the Harbor Helm chart to repair it**. `airgap-helm-repo` is completely independent.
+2. **Zero Authentication Protocol Matching**:
+   Public Helm repositories use unauthenticated HTTP `GET` requests (`index.yaml` + `*.tgz`). `airgap-helm-repo` replicates this exact behavior over internal HTTP port 8080 with **zero tokens, passwords, or certificate verifications**. Harbor requires OCI login credentials, and Forgejo requires Git/Package tokens.
+3. **Stateless & Instant Boot**:
+   `airgap-helm-repo` is a 5MB static micro-webserver backed directly by a Kubernetes Secret (`airgap-helm-charts`) populated from `airgap/charts/*.tgz`. It has **no database, no persistent volumes**, and boots in under 1 second.
+
+| Feature | `airgap-helm-repo:8080` | In-Cluster Harbor | In-Cluster Forgejo |
+| :--- | :--- | :--- | :--- |
+| **Survives Harbor Outage** | ✅ **Yes** (Independent) | ❌ **No** (Circular failure) | ✅ **Yes** |
+| **Authentication Setup** | ✅ **None** (Anonymous HTTP) | ⚠️ Requires OCI creds secret | ⚠️ Requires Git / Token |
+| **Boot Time** | ⚡ **< 1 second** | ⏳ ~45–60 seconds | ⏳ ~15–30 seconds |
+| **Database Dependency** | ✅ None (Stateless Secret) | ❌ PostgreSQL + Redis | ❌ SQLite / DB |
+| **Primary Purpose** | 🎯 **Day-0 Platform Helm Charts** | 🎯 **Day-1 App Images & CI/CD** | 🎯 **Git Source of Truth** |
+
+---
+
+## 🔍 How to Validate Argo CD is Syncing with Forgejo (Not GitHub)
+
+### 1. Check Registered Repositories in Argo CD UI
+1. Open [https://argocd.chetan.local](https://argocd.chetan.local) -> Click **Settings (Gear Icon)** -> **Repositories**.
+2. Verify:
+   * **URL**: `http://forgejo-http.forgejo.svc.cluster.local:3000/forgejo_admin/gitops-argocd-infra.git`
+   * **Connection Status**: 🟢 `Successful`
+   * **GitHub presence**: None. GitHub is not registered.
+
+### 2. Verify via CLI / API
+```bash
+# Verify repository secret in Kubernetes:
+kubectl get secret forgejo-infra-repo-secret -n argocd -o jsonpath="{.data.url}" | base64 -d
+# Output: http://forgejo-http.forgejo.svc.cluster.local:3000/forgejo_admin/gitops-argocd-infra.git
+```
+
+### 3. Understanding What Displays in the UI: Helm Apps vs Git Apps
+* **Child Applications** (`traefik`, `harbor`, `metrics-server`, etc.): Display their **Helm Chart Version** (e.g., `41.6.0`, `1.19.2`) because they pull from Helm repositories.
+* **Parent Application (`infra-apps`)**: Displays the **Git Branch** (`main`) and the live **Forgejo Commit SHA** (e.g., `53aaab0`) because it pulls manifests directly from Forgejo Git!
 
 ---
 
@@ -97,3 +160,4 @@ Takes pre-installed infrastructure applications (Traefik, Metrics Server, and ce
 
 With Argo CD running and managing platform infrastructure, proceed to:
 ➡️ [07-apps](../07-apps/README.md) to connect the workload repository (`gitops-argocd-apps`) and deploy applications.
+

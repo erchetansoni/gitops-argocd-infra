@@ -8,12 +8,20 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 VALUES_FILE="${SCRIPT_DIR}/forgejo-values.yaml"
-NAMESPACE="forgejo"
-RELEASE_NAME="forgejo"
-CHART_VERSION="17.2.0"
-HELM_CHART="oci://code.forgejo.org/forgejo-helm/forgejo"
-FORGEJO_HOST="git.chetan.local"
+NAMESPACE="${FORGEJO_NAMESPACE:-${NAMESPACE:-forgejo}}"
+RELEASE_NAME="${RELEASE_NAME:-forgejo}"
+CHART_VERSION="${CHART_VERSION:-17.2.0}"
+HELM_CHART="${HELM_CHART:-oci://code.forgejo.org/forgejo-helm/forgejo}"
+FORGEJO_HOST="${FORGEJO_HOST:-git.${MAIN_DOMAIN:-chetan.local}}"
 # ==============================================================================
 
 echo "================================================================="
@@ -69,12 +77,33 @@ helm upgrade --install "${RELEASE_NAME}" "${CHART_SOURCE}" \
   --namespace "${NAMESPACE}" \
   --create-namespace \
   --values "${VALUES_FILE_NATIVE}" \
+  --set httpRoute.hostnames[0]="${FORGEJO_HOST}" \
+  --set gitea.config.server.DOMAIN="${FORGEJO_HOST}" \
+  --set gitea.config.server.ROOT_URL="https://${FORGEJO_HOST}/" \
+  --set gitea.admin.username="${FORGEJO_USER:-forgejo_admin}" \
+  --set gitea.admin.password="${FORGEJO_PASS:-Forgejo12345}" \
   --wait \
   --timeout 10m
 
 # Step 2: Wait for rollout of Forgejo deployment to complete
 echo "⏳ Waiting for Forgejo deployment rollout to complete..."
 kubectl rollout status deployment/"${RELEASE_NAME}" -n "${NAMESPACE}" --timeout=300s || true
+
+# Step 3: Wait for Forgejo HTTP/API health check
+echo "⏳ Verifying Forgejo API health..."
+MAX_RETRIES=20
+RETRY_COUNT=0
+until curl -k -s --connect-timeout 2 "https://${FORGEJO_HOST}/api/v1/version" | grep -q '"version"' 2>/dev/null; do
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  if [[ ${RETRY_COUNT} -ge ${MAX_RETRIES} ]]; then
+    echo "   ⚠️ Forgejo API health check timed out, proceeding with cluster status."
+    break
+  fi
+  echo "   Waiting for Forgejo API health endpoint (${RETRY_COUNT}/${MAX_RETRIES})..."
+  sleep 3
+done
+echo "✅ Forgejo health check passed!"
+
 
 echo ""
 echo "================================================================="
@@ -87,9 +116,11 @@ echo ""
 echo "================================================================="
 echo "🎉 Forgejo successfully deployed!"
 echo "   URL:      https://${FORGEJO_HOST}"
-echo "   Username: forgejo_admin"
-echo "   Password: Forgejo12345"
+echo "   Username: ${FORGEJO_USER:-forgejo_admin}"
+echo "   Password: ${FORGEJO_PASS:-Forgejo12345}"
 echo ""
 echo "💡 To test Git clone over HTTPS:"
-echo "   git clone https://forgejo_admin:Forgejo12345@${FORGEJO_HOST}/forgejo_admin/test-repo.git"
+echo "   git clone https://${FORGEJO_USER:-forgejo_admin}:${FORGEJO_PASS:-Forgejo12345}@${FORGEJO_HOST}/${FORGEJO_USER:-forgejo_admin}/test-repo.git"
+echo ""
+echo "💡 Tip: Run ./print-summary.sh anytime to view all platform credentials & URLs."
 echo "================================================================="

@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+# Load centralized environment if available
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh" "${SCRIPT_DIR}/../../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 ################################################################################
 # CERTIFICATE CONFIGURATION VARIABLES (EDIT AS NEEDED)
 ################################################################################
 
 # Primary Wildcard Domain & Subject
-MAIN_DOMAIN="chetan.local"
+MAIN_DOMAIN="${MAIN_DOMAIN:-chetan.local}"
 DOMAIN="*.${MAIN_DOMAIN}"
 PRIMARY_CN="*.${MAIN_DOMAIN}"
 
@@ -36,19 +46,18 @@ SAN_IPS=(
 )
 
 # Validity Periods
-CA_VALIDITY_DAYS=3650     # 10 Years
-CERT_VALIDITY_DAYS=1825   # 5 Years
+CA_VALIDITY_DAYS="${CA_VALIDITY_DAYS:-3650}"     # 10 Years
+CERT_VALIDITY_DAYS="${CERT_VALIDITY_DAYS:-1825}"   # 5 Years
 
 # Certificate Subject Details
-COUNTRY="IN"
-STATE="Madhya Pradesh"
-LOCALITY="Bhopal"
-ORGANIZATION="Local Infra"
-ORGANIZATIONAL_UNIT="ArgoCD & Kubernetes"
-CA_COMMON_NAME="Local Root CA"
+COUNTRY="${CERT_COUNTRY:-${COUNTRY:-IN}}"
+STATE="${CERT_STATE:-${STATE:-Madhya Pradesh}}"
+LOCALITY="${CERT_LOCALITY:-${LOCALITY:-Bhopal}}"
+ORGANIZATION="${CERT_ORGANIZATION:-${ORGANIZATION:-Local Infra}}"
+ORGANIZATIONAL_UNIT="${CERT_ORGANIZATIONAL_UNIT:-${ORGANIZATIONAL_UNIT:-ArgoCD & Kubernetes}}"
+CA_COMMON_NAME="${CA_COMMON_NAME:-Local Root CA}"
 
 # Output Locations
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CA_STORAGE_DIR="${SCRIPT_DIR}/../ca-store"
 SERVER_CERTS_DIR="${SCRIPT_DIR}/../output"
 

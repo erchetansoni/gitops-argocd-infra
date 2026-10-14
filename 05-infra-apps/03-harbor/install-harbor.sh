@@ -8,13 +8,21 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 VALUES_FILE="${SCRIPT_DIR}/harbor-values.yaml"
-NAMESPACE="harbor"
-RELEASE_NAME="harbor"
-CHART_VERSION="1.19.2"
-HELM_CHART="harbor/harbor"
-HELM_REPO_URL="https://helm.goharbor.io"
-HARBOR_HOST="cr.chetan.local"
+NAMESPACE="${HARBOR_NAMESPACE:-${NAMESPACE:-harbor}}"
+RELEASE_NAME="${RELEASE_NAME:-harbor}"
+CHART_VERSION="${CHART_VERSION:-1.19.2}"
+HELM_CHART="${HELM_CHART:-harbor/harbor}"
+HELM_REPO_URL="${HELM_REPO_URL:-https://helm.goharbor.io}"
+HARBOR_HOST="${HARBOR_HOST:-cr.${MAIN_DOMAIN:-chetan.local}}"
 # ==============================================================================
 
 echo "================================================================="
@@ -72,17 +80,35 @@ helm upgrade --install "${RELEASE_NAME}" "${CHART_SOURCE}" \
   --namespace "${NAMESPACE}" \
   --create-namespace \
   --values "${VALUES_FILE_NATIVE}" \
+  --set externalURL="https://${HARBOR_HOST}" \
+  --set expose.route.hosts[0]="${HARBOR_HOST}" \
   --wait \
   --timeout 10m
 
 # Step 2: Wait for rollout of the deployments to complete
 echo "⏳ Waiting for Harbor deployments rollout to complete..."
-for d in core portal jobservice registry; do
+for d in core portal jobservice registry database redis; do
   if kubectl get deployment "${RELEASE_NAME}-${d}" -n "${NAMESPACE}" >/dev/null 2>&1; then
     echo "   Checking deployment: ${RELEASE_NAME}-${d}..."
     kubectl rollout status deployment/"${RELEASE_NAME}-${d}" -n "${NAMESPACE}" --timeout=180s || true
   fi
 done
+
+# Step 3: Wait for Harbor HTTP/API health check
+echo "⏳ Verifying Harbor API health..."
+MAX_RETRIES=20
+RETRY_COUNT=0
+until curl -k -s --connect-timeout 2 "https://${HARBOR_HOST}/api/v2.0/health" | grep -q '"status":"healthy"' 2>/dev/null; do
+  RETRY_COUNT=$((RETRY_COUNT + 1))
+  if [[ ${RETRY_COUNT} -ge ${MAX_RETRIES} ]]; then
+    echo "   ⚠️ Harbor API health check timed out, proceeding with cluster status."
+    break
+  fi
+  echo "   Waiting for Harbor API health endpoint (${RETRY_COUNT}/${MAX_RETRIES})..."
+  sleep 3
+done
+echo "✅ Harbor health check passed!"
+
 
 echo ""
 echo "================================================================="
@@ -96,8 +122,10 @@ echo "================================================================="
 echo "🎉 Harbor successfully deployed!"
 echo "   URL:      https://${HARBOR_HOST}"
 echo "   Username: admin"
-echo "   Password: Harbor12345"
+echo "   Password: ${HARBOR_ADMIN_PASSWORD:-Harbor12345}"
 echo ""
 echo "💡 To test container registry login:"
-echo "   docker login ${HARBOR_HOST} -u admin -p Harbor12345"
+echo "   docker login ${HARBOR_HOST} -u admin -p ${HARBOR_ADMIN_PASSWORD:-Harbor12345}"
+echo ""
+echo "💡 Tip: Run ./print-summary.sh anytime to view all platform credentials & URLs."
 echo "================================================================="

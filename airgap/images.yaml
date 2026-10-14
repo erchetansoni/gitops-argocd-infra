@@ -129,7 +129,7 @@ images:
 
   - component: forgejo-runner-dind
     description: "Docker-in-Docker daemon sidecar for workflow container jobs"
-    image: docker.io/library/docker:29.3.1-dind
+    image: docker.io/docker:29.3.1-dind
 
   - component: forgejo-runner-kubectl
     description: "Kubectl helper image for runner hook jobs"

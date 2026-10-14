@@ -415,7 +415,7 @@ items:
             dind:
               image:
                 registry: docker.io
-                repository: library/docker
+                repository: docker
                 tag: "29.3.1-dind"
                 pullPolicy: IfNotPresent
               resources:
