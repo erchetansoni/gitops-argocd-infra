@@ -166,10 +166,11 @@ With the **App-of-Apps** orchestrator in place, you **never** run manual `helm u
    git commit -m "chore: upgrade metrics-server to 3.14.0"
    git push forgejo main
    ```
-3. **Argo CD reconciles automatically**:
-   * The parent application (`infra-apps`) detects the new commit SHA in Forgejo.
-   * It applies the updated configuration to the child application.
-   * Kubernetes rolls out the changes with zero downtime.
+### Adding a Brand New Infrastructure Application:
+
+* **In Online Mode**: Append a new `Application` block under `items:` in [platform-apps.yaml](platform-apps.yaml) with the official public `repoURL: https://...`, then `git push forgejo main`. Argo CD deploys it instantly.
+* **In Air-Gap Mode**: First download the `.tgz` package into `airgap/charts/`, import the container images, update the `airgap-helm-charts` Secret, and set `repoURL: http://airgap-helm-repo.argocd.svc:8080`.
+* **Disconnecting Internet Post-Bootstrap**: For a detailed walkthrough on taking an online cluster completely offline without errors, see [airgap/README.md#3-what-if-you-bootstrap-with-internet-mode-but-later-disconnect-internet](../airgap/README.md#3-what-if-you-bootstrap-with-internet-mode-but-later-disconnect-internet).
 
 ---
 

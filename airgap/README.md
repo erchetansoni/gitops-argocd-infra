@@ -330,3 +330,153 @@ When you need to reclaim disk space by deleting local container image tarballs (
 ./airgap/clean-offline-assets.sh
 ```
 
+---
+
+## 🔄 Day-2 Lifecycle Operations: Adding Apps & Disconnecting Internet
+
+### 1. Adding a New Platform/Infra App in Online Mode
+
+Adding a new platform app (e.g. Prometheus, Vault, Loki) when connected to the internet is straightforward:
+
+1. **Add to [05-infra-apps/platform-apps.yaml](../05-infra-apps/platform-apps.yaml)**:
+   Append a new `Application` block under `items:`:
+   ```yaml
+   - apiVersion: argoproj.io/v1alpha1
+     kind: Application
+     metadata:
+       name: prometheus
+       namespace: argocd
+       annotations:
+         argocd.argoproj.io/sync-wave: "2"
+     spec:
+       project: default
+       source:
+         repoURL: https://prometheus-community.github.io/helm-charts
+         chart: kube-prometheus-stack
+         targetRevision: 69.3.0
+         helm:
+           valuesObject:
+             # Custom Helm values
+       destination:
+         server: https://kubernetes.default.svc
+         namespace: monitoring
+       syncPolicy:
+         automated:
+           prune: false
+           selfHeal: true
+         syncOptions:
+           - CreateNamespace=true
+           - ServerSideApply=true
+   ```
+2. **Commit and Push**:
+   ```bash
+   git add 05-infra-apps/platform-apps.yaml
+   git commit -m "feat(infra): add prometheus monitoring stack"
+   git push forgejo main
+   ```
+3. **Argo CD reconciles automatically**: The root `infra-apps` Application detects the new child application in Forgejo Git and deploys Prometheus into Kubernetes.
+
+---
+
+### 2. Adding a New Platform/Infra App in Air-Gap Mode
+
+In a disconnected environment, Argo CD cannot download charts from the internet, and Kubernetes cannot pull images from Docker Hub. You must package the assets on an internet-connected workstation first:
+
+#### Step A: On the Connected Machine (Asset Preparation)
+1. **Download the Helm Chart package**:
+   ```bash
+   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+   helm pull prometheus-community/kube-prometheus-stack --version 69.3.0 -d airgap/charts/
+   ```
+2. **Re-generate the local chart repository index**:
+   ```bash
+   helm repo index airgap/charts/
+   ```
+3. **Identify & Export Container Images**:
+   Render the chart templates to discover all required images:
+   ```bash
+   helm template airgap/charts/kube-prometheus-stack-69.3.0.tgz | grep -E 'image:\s*"?([^"[:space:]]+)'
+   ```
+   Add these image strings to `airgap/images.yaml`, pull them, and export to tarball:
+   ```bash
+   docker pull prom/prometheus:v3.2.0
+   docker save prom/prometheus:v3.2.0 -o new-app-images.tar
+   ```
+
+#### Step B: In the Air-Gap Environment (Import & Deploy)
+1. **Load Images into Kubernetes Node containerd** (or push to in-cluster Harbor `cr.chetan.local`):
+   ```bash
+   # KinD:
+   kind load image-archive new-app-images.tar --name gitops-demo-cluster
+   # Or K3s:
+   sudo k3s ctr images import new-app-images.tar
+   ```
+2. **Update the in-cluster Chart Secret**:
+   Re-apply the `airgap-helm-charts` Secret with the newly added `.tgz` file:
+   ```bash
+   kubectl create secret generic airgap-helm-charts \
+     --from-file=airgap/charts/ \
+     -n argocd --dry-run=client -o yaml | kubectl apply -f -
+   ```
+3. **Declare the Application with Internal `repoURL`**:
+   In [05-infra-apps/platform-apps.yaml](../05-infra-apps/platform-apps.yaml), specify the internal chart repo:
+   ```yaml
+   source:
+     repoURL: http://airgap-helm-repo.argocd.svc:8080   # <-- Internal offline server
+     chart: kube-prometheus-stack
+     targetRevision: 69.3.0
+   ```
+4. **Push to Forgejo**:
+   ```bash
+   git add 05-infra-apps/platform-apps.yaml
+   git commit -m "feat(infra): add prometheus in airgap mode"
+   git push forgejo main
+   ```
+
+---
+
+### 3. What if You Bootstrap with Internet Mode, but LATER Disconnect Internet?
+
+This is a common enterprise pattern: **provisioning a cluster in a staging lab with internet access, then shipping it to a disconnected customer site or air-gapped production**.
+
+#### What keeps working automatically with ZERO changes:
+1. **All Active Pods**: Running containers keep running without interruption.
+2. **Pod Restarts / Node Reboots**: Because all manifests declare explicit version tags (e.g. `:v3.7.13`), containerd caches them locally with `imagePullPolicy: IfNotPresent`. Node reboots will restart pods cleanly without network access.
+3. **In-Cluster GitOps**: Developers push to Forgejo (`git push forgejo main`), and Argo CD polls `http://forgejo-http.forgejo.svc.cluster.local:3000` 100% internally.
+
+#### The ONE component that needs transition:
+* In online mode, [platform-apps.yaml](../05-infra-apps/platform-apps.yaml) was committed with **public internet URLs** (`https://traefik.github.io/charts`, `https://helm.goharbor.io`).
+* When the internet is disconnected, Argo CD's periodic 3-minute poll will attempt to check those public URLs for chart updates.
+* It will fail with `ComparisonError: dial tcp ... i/o timeout` (though existing running pods remain untouched).
+
+#### How to "Cut the Cord" (Seamless Transition to Air-Gap):
+To decouple Argo CD from the internet cleanly:
+
+1. **Deploy the in-cluster chart server**:
+   ```bash
+   # Create the chart secret from local airgap/charts/
+   kubectl create secret generic airgap-helm-charts \
+     --from-file=airgap/charts/ \
+     -n argocd --dry-run=client -o yaml | kubectl apply -f -
+
+   # Start the chart web server
+   kubectl apply -f 06-argocd/airgap-helm-repo.yaml -n argocd
+   ```
+2. **Redirect `platform-apps.yaml` to the internal chart server**:
+   In `05-infra-apps/platform-apps.yaml`, change all public `repoURL:` fields to:
+   ```yaml
+   repoURL: http://airgap-helm-repo.argocd.svc:8080
+   ```
+3. **Commit and push to Forgejo**:
+   ```bash
+   git add 05-infra-apps/platform-apps.yaml
+   git commit -m "chore(airgap): switch helm repoURL to in-cluster airgap chart server"
+   git push forgejo main
+   ```
+4. **Trigger Argo CD hard refresh**:
+   ```bash
+   kubectl annotate application infra-apps -n argocd argocd.argoproj.io/refresh=hard --overwrite
+   ```
+Argo CD immediately stops contacting the internet and fetches all charts from `http://airgap-helm-repo.argocd.svc:8080`. The cluster is now permanently 100% autonomous.
+
+
