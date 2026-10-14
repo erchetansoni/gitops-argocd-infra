@@ -5,9 +5,9 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NAMESPACE="${ARGOCD_NAMESPACE:-argocd}"
-SECRET_NAME="forgejo-infra-repo-secret"
-FORGEJO_INTERNAL_URL="http://forgejo-http.forgejo.svc.cluster.local:3000/forgejo_admin/gitops-argocd-infra.git"
+NAMESPACE="${ARGOCD_NAMESPACE:-${NAMESPACE:-argocd}}"
+SECRET_NAME="${SECRET_NAME:-forgejo-infra-repo-secret}"
+FORGEJO_INTERNAL_URL="${FORGEJO_INTERNAL_URL:-http://forgejo-http.forgejo.svc.cluster.local:3000/forgejo_admin/gitops-argocd-infra.git}"
 FORGEJO_USER="${FORGEJO_USER:-forgejo_admin}"
 FORGEJO_PASS="${FORGEJO_PASS:-Forgejo12345}"
 

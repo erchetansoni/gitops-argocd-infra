@@ -9,9 +9,9 @@ export MSYS_NO_PATHCONV=1
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_FILE="${SCRIPT_DIR}/traefik-values.yaml"
-NAMESPACE="traefik"
-RELEASE_NAME="traefik"
-GATEWAY_API_VERSION="v1.6.2"
+NAMESPACE="${NAMESPACE:-traefik}"
+RELEASE_NAME="${RELEASE_NAME:-traefik}"
+GATEWAY_API_VERSION="${GATEWAY_API_VERSION:-v1.6.2}"
 
 # Gateway API CRD Sources (Online URL & Offline Local File)
 CRD_ONLINE_URL="https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"

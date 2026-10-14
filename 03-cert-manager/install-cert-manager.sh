@@ -10,11 +10,11 @@ export MSYS_NO_PATHCONV=1
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_FILE="${SCRIPT_DIR}/cert-manager-values.yaml"
 CLUSTER_ISSUER_FILE="${SCRIPT_DIR}/cluster-issuer.yaml"
-NAMESPACE="cert-manager"
-RELEASE_NAME="cert-manager"
-CHART_VERSION="v1.21.2"
-HELM_CHART="jetstack/cert-manager"
-HELM_REPO_URL="https://charts.jetstack.io"
+NAMESPACE="${NAMESPACE:-cert-manager}"
+RELEASE_NAME="${RELEASE_NAME:-cert-manager}"
+CHART_VERSION="${CHART_VERSION:-v1.21.2}"
+HELM_CHART="${HELM_CHART:-jetstack/cert-manager}"
+HELM_REPO_URL="${HELM_REPO_URL:-https://charts.jetstack.io}"
 
 # Root CA paths
 ROOT_CA_DIR="${SCRIPT_DIR}/../04-traefik-gateway/cert/tls-generator/ca-store"

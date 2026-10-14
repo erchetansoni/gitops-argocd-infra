@@ -248,6 +248,96 @@ To avoid the common architectural trap ("chicken-and-egg") where Kubernetes cann
 | **Day 0 (Platform Bootstrap)** | Core infrastructure pods (Traefik, cert-manager, Metrics Server, Harbor, Forgejo, Argo CD) | Pre-loaded into KinD node containerd runtime via `load-images-to-kind.sh` with `imagePullPolicy: IfNotPresent` |
 | **Day 1 / Day 2 (Workloads & CI/CD)** | Application microservices, custom container builds, and Helm charts | Pushed to and served by **Harbor** (`cr.chetan.local`) |
 
+---
+
+## 📖 Complete Scripts, Arguments & Environment Variables Reference
+
+Every script in this repository supports configurable environment variables, command-line arguments, and flags for customization across development, CI/CD, and air-gapped production:
+
+### 1. Orchestration Script
+
+| Script | Purpose | Arguments / Flags | Environment Variables (with Defaults) | Example Usage |
+| :--- | :--- | :--- | :--- | :--- |
+| **[`main.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/main.sh)** | End-to-end automated platform bootstrap (Steps 01 to 06) | None | `INSTALL_MODE`: `"online"` or `"airgap"` *(Auto-detected via connectivity check if unset)* | `INSTALL_MODE=airgap ./main.sh` |
+
+---
+
+### 2. Cluster Creation & Image Preloading
+
+| Script | Purpose | Arguments / Flags | Environment Variables (with Defaults) | Example Usage |
+| :--- | :--- | :--- | :--- | :--- |
+| **[`01-create-cluster/create-cluster.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/01-create-cluster/create-cluster.sh)** | Creates single-node KinD cluster with hostPort 80/443 | None | Uses `01-create-cluster/kind-cluster-config.yaml` | `./01-create-cluster/create-cluster.sh` |
+| **[`01-create-cluster/create-cluster.ps1`](file:///c:/Projects/My_Projects/gitops-argocd-infra/01-create-cluster/create-cluster.ps1)** | PowerShell version of cluster creation | `-Force` (`-f`): Suppress confirmation prompt if cluster already exists | None | `.\01-create-cluster\create-cluster.ps1 -Force` |
+| **[`01-create-cluster/load-images-to-kind.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/01-create-cluster/load-images-to-kind.sh)** | Pre-loads container images into KinD containerd cache | `-p, --pull`: Auto-pull missing images<br>`-a, --archive [path]`: Load from tar archive<br>`-n, --name [cluster]`: KinD cluster name<br>`-l, --list`: Preview missing/present images<br>`-h, --help`: Show help | `DEFAULT_CLUSTER`: `"gitops-demo-cluster"`<br>`IMAGES_FILE`: `airgap/images.yaml` | `./01-create-cluster/load-images-to-kind.sh --pull`<br>`./load-images-to-kind.sh --archive airgap/airgap-images.tar` |
+| **[`01-create-cluster/load-images-to-kind.ps1`](file:///c:/Projects/My_Projects/gitops-argocd-infra/01-create-cluster/load-images-to-kind.ps1)** | PowerShell version of image loader | `-Pull`: Pull missing images<br>`-Archive [path]`: Load from tarball<br>`-Name [cluster]`: Cluster name<br>`-ListOnly`: Preview cache | None | `.\01-create-cluster\load-images-to-kind.ps1 -Pull` |
+
+---
+
+### 3. Gateway, Ingress & TLS Controllers
+
+| Script | Purpose | Arguments / Flags | Environment Variables (with Defaults) | Example Usage |
+| :--- | :--- | :--- | :--- | :--- |
+| **[`02-traefik-controller/install-traefik-gateway-controller.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/02-traefik-controller/install-traefik-gateway-controller.sh)** | Installs Gateway API CRDs & Traefik v3 DaemonSet | None | `NAMESPACE`: `"traefik"`<br>`RELEASE_NAME`: `"traefik"`<br>`GATEWAY_API_VERSION`: `"v1.6.2"`<br>`HELM_REPO_URL`: `"https://traefik.github.io/charts"` | `NAMESPACE=custom-traefik ./install-traefik-gateway-controller.sh` |
+| **[`03-cert-manager/install-cert-manager.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/03-cert-manager/install-cert-manager.sh)** | Installs cert-manager & injects local Root CA | None | `NAMESPACE`: `"cert-manager"`<br>`RELEASE_NAME`: `"cert-manager"`<br>`CHART_VERSION`: `"v1.21.2"`<br>`HELM_REPO_URL`: `"https://charts.jetstack.io"` | `./03-cert-manager/install-cert-manager.sh` |
+| **[`04-traefik-gateway/install-traefik-gatewayclass.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/install-traefik-gatewayclass.sh)** | Deploys GatewayClass, Gateway, & Wildcard TLS Cert | None | `SECRET_NAME`: `"domain-certificate-tls-secret"`<br>`SECRET_NAMESPACE`: `"default"` | `./04-traefik-gateway/install-traefik-gatewayclass.sh` |
+
+---
+
+### 4. Custom TLS & Root CA Generation / Trust Store Setup
+
+| Script | Purpose | Arguments / Flags | Environment Variables / Parameters | Example Usage |
+| :--- | :--- | :--- | :--- | :--- |
+| **[`04-traefik-gateway/cert/tls-generator/server/generate-certs.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/cert/tls-generator/server/generate-certs.sh)** | Generates 10-yr Root CA & 5-yr Wildcard TLS Cert (`*.chetan.local`) | None | `MAIN_DOMAIN`: `"chetan.local"`<br>`CA_VALIDITY_DAYS`: `3650`<br>`CERT_VALIDITY_DAYS`: `1825`<br>`CA_COMMON_NAME`: `"Local Root CA"` | `bash 04-traefik-gateway/cert/tls-generator/server/generate-certs.sh` |
+| **[`04-traefik-gateway/cert/tls-generator/server/generate-certs.ps1`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/cert/tls-generator/server/generate-certs.ps1)** | Windows PowerShell version of certificate generator | None | Configurable variables inside script (`$MainDomain`, `$CaValidityDays`) | `powershell -File .\04-traefik-gateway\cert\tls-generator\server\generate-certs.ps1` |
+| **[`04-traefik-gateway/cert/tls-generator/client/install-ca-linux.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/cert/tls-generator/client/install-ca-linux.sh)** | Installs Root CA into Debian/Ubuntu/RHEL/Arch trust store | Requires `sudo` | Expects `rootCA.crt` in script directory | `sudo bash ./install-ca-linux.sh` |
+| **[`04-traefik-gateway/cert/tls-generator/client/install-ca-windows.ps1`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/cert/tls-generator/client/install-ca-windows.ps1)** | Imports Root CA into Windows `Trusted Root Certification Authorities` | Requires Administrator | Expects `rootCA.crt` in script directory | `.\install-ca-windows.ps1` |
+| **[`04-traefik-gateway/cert/tls-generator/client/uninstall-ca-linux.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/cert/tls-generator/client/uninstall-ca-linux.sh)** | Removes Root CA from Linux system trust store | Requires `sudo` | Removes `avgol-internal-root-ca.crt` | `sudo bash ./uninstall-ca-linux.sh` |
+| **[`04-traefik-gateway/cert/tls-generator/client/uninstall-ca-windows.ps1`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/cert/tls-generator/client/uninstall-ca-windows.ps1)** | Removes Root CA from Windows `Trusted Root Certification Authorities` | `-CaCommonName [string]` (Default: `"Avgol Internal Root CA"`) | Requires Administrator | `.\uninstall-ca-windows.ps1 -CaCommonName "Local Root CA"` |
+
+---
+
+### 5. Platform Infrastructure Applications
+
+| Script | Purpose | Arguments / Flags | Environment Variables (with Defaults) | Example Usage |
+| :--- | :--- | :--- | :--- | :--- |
+| **[`05-infra-apps/02-metrics-server/install-metrics-server.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/02-metrics-server/install-metrics-server.sh)** | Deploys Metrics Server for `kubectl top` | None | `NAMESPACE`: `"kube-system"`<br>`RELEASE_NAME`: `"metrics-server"`<br>`CHART_VERSION`: `"3.14.0"` | `./install-metrics-server.sh` |
+| **[`05-infra-apps/03-harbor/install-harbor.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/03-harbor/install-harbor.sh)** | Installs Harbor Registry & verifies `/api/v2.0/health` | None | `NAMESPACE`: `"harbor"`<br>`RELEASE_NAME`: `"harbor"`<br>`CHART_VERSION`: `"1.19.2"`<br>`HARBOR_HOST`: `"cr.chetan.local"`<br>`HELM_REPO_URL`: `"https://helm.goharbor.io"` | `HARBOR_HOST=cr.mydomain.local ./install-harbor.sh` |
+| **[`05-infra-apps/04-forgejo/install-forgejo.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/04-forgejo/install-forgejo.sh)** | Installs Forgejo Git service & verifies `/api/v1/version` | None | `NAMESPACE`: `"forgejo"`<br>`RELEASE_NAME`: `"forgejo"`<br>`CHART_VERSION`: `"17.2.0"`<br>`FORGEJO_HOST`: `"git.chetan.local"` | `./install-forgejo.sh` |
+| **[`05-infra-apps/04-forgejo/sync-repo-to-forgejo.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/04-forgejo/sync-repo-to-forgejo.sh)** | Seeds repo via API, configures dual-remote, pushes branch | None | `FORGEJO_HOST`: `"git.chetan.local"`<br>`FORGEJO_USER`: `"forgejo_admin"`<br>`FORGEJO_PASS`: `"Forgejo12345"`<br>`FORGEJO_REPO_NAME`: `"gitops-argocd-infra"`<br>`GIT_REMOTE_NAME`: `"forgejo"` | `./sync-repo-to-forgejo.sh` |
+| **[`05-infra-apps/05-forgejo-runner/install-forgejo-runner.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/05-forgejo-runner/install-forgejo-runner.sh)** | Generates runner token from pod & deploys DinD runner | None | `NAMESPACE`: `"forgejo-runner"`<br>`RELEASE_NAME`: `"forgejo-runner"`<br>`CHART_VERSION`: `"0.7.6"`<br>`FORGEJO_NAMESPACE`: `"forgejo"`<br>`FORGEJO_INSTANCE_URL`: `"http://forgejo-http.forgejo.svc.cluster.local:3000"`<br>`RUNNER_SECRET_NAME`: `"forgejo-runner-secret"` | `./install-forgejo-runner.sh` |
+
+---
+
+### 6. Argo CD & GitOps Control Plane
+
+| Script | Purpose | Arguments / Flags | Environment Variables (with Defaults) | Example Usage |
+| :--- | :--- | :--- | :--- | :--- |
+| **[`06-argocd/01-install-argocd.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/06-argocd/01-install-argocd.sh)** | Installs Argo CD, applies configmaps & exposes UI | None | `ARGOCD_NAMESPACE` / `NAMESPACE`: `"argocd"`<br>`ARGOCD_HOST`: `"argocd.chetan.local"`<br>`ARGOCD_VERSION`: `"3.5.3"` | `./01-install-argocd.sh` |
+| **[`06-argocd/02-adopt-infra-apps.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/06-argocd/02-adopt-infra-apps.sh)** | Adopts 6 infra apps; deploys `airgap-helm-repo` if offline | None | `ARGOCD_NAMESPACE` / `NAMESPACE`: `"argocd"`<br>`INSTALL_MODE`: `"online"` or `"airgap"`<br>`INFRA_MANIFEST`: auto-detects `platform-apps.yaml` | `INSTALL_MODE=airgap ./02-adopt-infra-apps.sh` |
+| **[`06-argocd/03-configure-forgejo-repo.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/06-argocd/03-configure-forgejo-repo.sh)** | Creates repo secret, tests connectivity & applies `app-of-apps.yaml` | None | `ARGOCD_NAMESPACE` / `NAMESPACE`: `"argocd"`<br>`FORGEJO_INTERNAL_URL`: `"http://forgejo-http.forgejo.svc.cluster.local:3000/forgejo_admin/gitops-argocd-infra.git"`<br>`FORGEJO_USER`: `"forgejo_admin"`<br>`FORGEJO_PASS`: `"Forgejo12345"`<br>`SECRET_NAME`: `"forgejo-infra-repo-secret"` | `./03-configure-forgejo-repo.sh` |
+
+---
+
+### 7. Workload Applications (`07-apps`)
+
+| Script | Purpose | Arguments / Flags | Environment Variables (from `.env` or Shell) | Example Usage |
+| :--- | :--- | :--- | :--- | :--- |
+| **[`07-apps/01-install-repo-creds-secret.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/07-apps/01-install-repo-creds-secret.sh)** | Configures private GitHub PAT secret in Argo CD | `$1`: Optional GitHub PAT token | `REPO_URL` / `GITHUB_REPO_URL`: `"https://github.com/erchetansoni/gitops-argocd-apps.git"`<br>`GITHUB_USER` / `GITHUB_USERNAME`: `"erchetansoni"`<br>`GITHUB_TOKEN`: PAT string<br>`REPO_SECRET_NAME`: `"repo-creds-secret"`<br>`ARGOCD_NAMESPACE`: `"argocd"` | `./01-install-repo-creds-secret.sh ghp_yourToken` |
+| **[`07-apps/02-install-root-app.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/07-apps/02-install-root-app.sh)** | Deploys root Matrix ApplicationSet for branch envs | None | `APPLICATIONSET_FILE`: `root-app/root-applicationset.yaml`<br>`ARGOCD_NAMESPACE`: `"argocd"`<br>`REPO_URL`: Dynamic repoURL substitution | `./02-install-root-app.sh` |
+
+---
+
+### 8. Offline Packaging, Node Loading & Image Cleanup
+
+| Script | Purpose | Arguments / Flags | Environment Variables (with Defaults) | Example Usage |
+| :--- | :--- | :--- | :--- | :--- |
+| **[`airgap/bundle-offline-assets.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/airgap/bundle-offline-assets.sh)** | Pulls images & packages `airgap-images.tar` | None | `TARGET_PLATFORM`: `"linux/amd64"`<br>`IMAGES_FILE`: auto-detects `images.yaml`<br>`OUTPUT_TAR`: `airgap/airgap-images.tar` | `./airgap/bundle-offline-assets.sh` |
+| **[`airgap/load-offline-assets.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/airgap/load-offline-assets.sh)** | Imports image tarball into K3s containerd nodes | `-c, --clean-source`: Delete tarball after load<br>`-s, --skip-clean`: Skip cleanup phase<br>`-h, --help`: Show help | `TAR_FILE`: `airgap/airgap-images.tar`<br>`K3S_IMAGES_DIR`: `/var/lib/rancher/k3s/agent/images` | `sudo ./airgap/load-offline-assets.sh --clean-source` |
+| **[`airgap/clean-offline-assets.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/airgap/clean-offline-assets.sh)** | Deletes tarballs inside `airgap/` directory | Forwards all arguments to `clean-images.sh` | None | `./airgap/clean-offline-assets.sh --dry-run` |
+| **[`clean-images.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/clean-images.sh)** | Interactive/CLI disk cleanup of all image tarballs | `-d, --dry-run`: Preview reclaimed bytes<br>`-f, --force`: Skip confirmation prompt<br>`-h, --help`: Show help<br>`[DIRECTORY]`: Target path (default: root) | None | `./clean-images.sh --dry-run`<br>`./clean-images.sh --force ./airgap` |
+| **[`clean-images.ps1`](file:///c:/Projects/My_Projects/gitops-argocd-infra/clean-images.ps1)** | PowerShell version of disk archive cleanup | `-DryRun` (`-d`): Preview without deleting<br>`-Force` (`-f`): Skip prompt<br>`-Path [string]`: Target directory path | None | `.\clean-images.ps1 -DryRun`<br>`.\clean-images.ps1 -Path .\airgap -Force` |
+
+
 
 ---
 

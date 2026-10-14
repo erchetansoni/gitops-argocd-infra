@@ -9,11 +9,11 @@ export MSYS_NO_PATHCONV=1
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_FILE="${SCRIPT_DIR}/forgejo-values.yaml"
-NAMESPACE="forgejo"
-RELEASE_NAME="forgejo"
-CHART_VERSION="17.2.0"
-HELM_CHART="oci://code.forgejo.org/forgejo-helm/forgejo"
-FORGEJO_HOST="git.chetan.local"
+NAMESPACE="${NAMESPACE:-forgejo}"
+RELEASE_NAME="${RELEASE_NAME:-forgejo}"
+CHART_VERSION="${CHART_VERSION:-17.2.0}"
+HELM_CHART="${HELM_CHART:-oci://code.forgejo.org/forgejo-helm/forgejo}"
+FORGEJO_HOST="${FORGEJO_HOST:-git.chetan.local}"
 # ==============================================================================
 
 echo "================================================================="

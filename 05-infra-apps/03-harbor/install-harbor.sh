@@ -9,12 +9,12 @@ export MSYS_NO_PATHCONV=1
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_FILE="${SCRIPT_DIR}/harbor-values.yaml"
-NAMESPACE="harbor"
-RELEASE_NAME="harbor"
-CHART_VERSION="1.19.2"
-HELM_CHART="harbor/harbor"
-HELM_REPO_URL="https://helm.goharbor.io"
-HARBOR_HOST="cr.chetan.local"
+NAMESPACE="${NAMESPACE:-harbor}"
+RELEASE_NAME="${RELEASE_NAME:-harbor}"
+CHART_VERSION="${CHART_VERSION:-1.19.2}"
+HELM_CHART="${HELM_CHART:-harbor/harbor}"
+HELM_REPO_URL="${HELM_REPO_URL:-https://helm.goharbor.io}"
+HARBOR_HOST="${HARBOR_HOST:-cr.chetan.local}"
 # ==============================================================================
 
 echo "================================================================="

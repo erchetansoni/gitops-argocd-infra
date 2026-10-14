@@ -9,13 +9,13 @@ export MSYS_NO_PATHCONV=1
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VALUES_FILE="${SCRIPT_DIR}/forgejo-runner-values.yaml"
-NAMESPACE="forgejo-runner"
-RELEASE_NAME="forgejo-runner"
-CHART_VERSION="0.7.6"
-HELM_CHART="oci://codeberg.org/wrenix/helm-charts/forgejo-runner"
-FORGEJO_NAMESPACE="forgejo"
-FORGEJO_INSTANCE_URL="http://forgejo-http.${FORGEJO_NAMESPACE}.svc.cluster.local:3000"
-RUNNER_SECRET_NAME="forgejo-runner-secret"
+NAMESPACE="${NAMESPACE:-forgejo-runner}"
+RELEASE_NAME="${RELEASE_NAME:-forgejo-runner}"
+CHART_VERSION="${CHART_VERSION:-0.7.6}"
+HELM_CHART="${HELM_CHART:-oci://codeberg.org/wrenix/helm-charts/forgejo-runner}"
+FORGEJO_NAMESPACE="${FORGEJO_NAMESPACE:-forgejo}"
+FORGEJO_INSTANCE_URL="${FORGEJO_INSTANCE_URL:-http://forgejo-http.${FORGEJO_NAMESPACE}.svc.cluster.local:3000}"
+RUNNER_SECRET_NAME="${RUNNER_SECRET_NAME:-forgejo-runner-secret}"
 # ==============================================================================
 
 echo "================================================================="

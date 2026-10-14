@@ -8,12 +8,12 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ARGOCD_VERSION="3.5.3"
-ARGOCD_NAMESPACE="argocd"
-ARGOCD_HOST="argocd.chetan.local"
-ARGOCD_SERVER_DEPLOYMENT="argocd-server"
-ARGOCD_INITIAL_ADMIN_SECRET="argocd-initial-admin-secret"
-HTTPROUTE_FILE="${SCRIPT_DIR}/argocd-httproute.yaml"
+ARGOCD_VERSION="${ARGOCD_VERSION:-3.5.3}"
+ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-${NAMESPACE:-argocd}}"
+ARGOCD_HOST="${ARGOCD_HOST:-argocd.chetan.local}"
+ARGOCD_SERVER_DEPLOYMENT="${ARGOCD_SERVER_DEPLOYMENT:-argocd-server}"
+ARGOCD_INITIAL_ADMIN_SECRET="${ARGOCD_INITIAL_ADMIN_SECRET:-argocd-initial-admin-secret}"
+HTTPROUTE_FILE="${HTTPROUTE_FILE:-${SCRIPT_DIR}/argocd-httproute.yaml}"
 ARGOCD_CONFIGMAPS_FILE="${SCRIPT_DIR}/argocd-configmaps.yaml"
 # ==============================================================================
 
