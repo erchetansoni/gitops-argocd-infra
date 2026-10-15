@@ -32,6 +32,7 @@ HARBOR_ADMIN_PASSWORD="${HARBOR_ADMIN_PASSWORD:-Harbor12345}"
 ZABBIX_HOST="${ZABBIX_HOST:-zabbix.${MAIN_DOMAIN:-chetan.local}}"
 ZABBIX_SRV_HOST="${ZABBIX_SRV_HOST:-zbx-srv.${MAIN_DOMAIN:-chetan.local}}"
 ZABBIX_PROXY_HOST="${ZABBIX_PROXY_HOST:-zbx-proxy.${MAIN_DOMAIN:-chetan.local}}"
+ZABBIX_SNMP_HOST="${ZABBIX_SNMP_HOST:-zbx-snmp.${MAIN_DOMAIN:-chetan.local}}"
 ZABBIX_NAMESPACE="${ZABBIX_NAMESPACE:-zabbix}"
 ZABBIX_USER="${ZABBIX_ADMIN_USER:-Admin}"
 ZABBIX_PASS="${ZABBIX_ADMIN_PASSWORD:-zabbix}"
@@ -162,10 +163,10 @@ fi
 echo "   Web UI:      https://${ZABBIX_HOST}"
 echo "   Server FQDN: ${ZABBIX_SRV_HOST} (In-cluster: zabbix-zabbix-server:10051)"
 echo "   Proxy FQDN:  ${ZABBIX_PROXY_HOST} (In-cluster: zabbix-zabbix-proxy:10051, SQLite3)"
+echo "   SNMP Traps:  ${ZABBIX_SNMP_HOST}:162/UDP (In-cluster: zabbix-snmptraps:162)"
 echo "   Username:    ${ZABBIX_USER}"
 echo "   Password:    ${ZABBIX_PASS}"
 echo "   Database:    TimescaleDB (timescale/timescaledb:2.17.2-pg16)"
-echo "   SNMP Traps:  UDP Port 162 (zabbix-snmptraps)"
 echo "   Agent:       Zabbix Agent 2 (DaemonSet on all nodes)"
 
 # ------------------------------------------------------------------------------
@@ -189,10 +190,10 @@ echo "🌐 6. LOCAL DNS / HOSTS RESOLUTION"
 echo "   -----------------------------------------------------------------------------"
 echo "   Ensure local domains resolve to 127.0.0.1:"
 echo "   • Windows (Run PowerShell as Administrator):"
-echo "     Add-Content -Path C:\\Windows\\System32\\drivers\\etc\\hosts -Value \"127.0.0.1 ${ARGOCD_HOST} ${FORGEJO_HOST} ${HARBOR_HOST} ${ZABBIX_HOST} ${ZABBIX_SRV_HOST} ${ZABBIX_PROXY_HOST}\""
+echo "     Add-Content -Path C:\\Windows\\System32\\drivers\\etc\\hosts -Value \"127.0.0.1 ${ARGOCD_HOST} ${FORGEJO_HOST} ${HARBOR_HOST} ${ZABBIX_HOST} ${ZABBIX_SRV_HOST} ${ZABBIX_PROXY_HOST} ${ZABBIX_SNMP_HOST}\""
 echo ""
 echo "   • Linux / macOS:"
-echo "     echo \"127.0.0.1 ${ARGOCD_HOST} ${FORGEJO_HOST} ${HARBOR_HOST} ${ZABBIX_HOST} ${ZABBIX_SRV_HOST} ${ZABBIX_PROXY_HOST}\" | sudo tee -a /etc/hosts"
+echo "     echo \"127.0.0.1 ${ARGOCD_HOST} ${FORGEJO_HOST} ${HARBOR_HOST} ${ZABBIX_HOST} ${ZABBIX_SRV_HOST} ${ZABBIX_PROXY_HOST} ${ZABBIX_SNMP_HOST}\" | sudo tee -a /etc/hosts"
 
 # ------------------------------------------------------------------------------
 # 6. Applications & Workloads

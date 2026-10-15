@@ -125,6 +125,21 @@ if kubectl get daemonset "${RELEASE_NAME}-zabbix-agent" -n "${NAMESPACE}" >/dev/
   kubectl rollout status daemonset/"${RELEASE_NAME}-zabbix-agent" -n "${NAMESPACE}" --timeout=120s || true
 fi
 
+# Step 3b: Bootstrap Proxy & Agent Interface
+echo ""
+echo "⚙️ Step 3b: Bootstrapping active proxy & server agent interface..."
+for i in {1..30}; do
+  if kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c "SELECT 1 FROM interface WHERE interfaceid = 1;" >/dev/null 2>&1; then
+    kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
+      "UPDATE interface SET useip = 0, dns = '${RELEASE_NAME}-zabbix-agent' WHERE interfaceid = 1;" >/dev/null 2>&1 || true
+    kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
+      "INSERT INTO proxy (proxyid, name, operating_mode) VALUES (1, 'zbx-proxy', 0) ON CONFLICT (name) DO NOTHING;" >/dev/null 2>&1 || true
+    echo "✅ Zabbix active proxy 'zbx-proxy' registered and server agent interface configured."
+    break
+  fi
+  sleep 2
+done
+
 # Step 4: Verification & Route Info
 echo ""
 echo "================================================================="

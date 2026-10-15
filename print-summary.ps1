@@ -49,6 +49,7 @@ $HarborHost = if ($env:HARBOR_HOST) { $env:HARBOR_HOST } else { "cr.$MainDomain"
 $ZabbixHost = if ($env:ZABBIX_HOST) { $env:ZABBIX_HOST } else { "zabbix.$MainDomain" }
 $ZabbixSrvHost = if ($env:ZABBIX_SRV_HOST) { $env:ZABBIX_SRV_HOST } else { "zbx-srv.$MainDomain" }
 $ZabbixProxyHost = if ($env:ZABBIX_PROXY_HOST) { $env:ZABBIX_PROXY_HOST } else { "zbx-proxy.$MainDomain" }
+$ZabbixSnmpHost = if ($env:ZABBIX_SNMP_HOST) { $env:ZABBIX_SNMP_HOST } else { "zbx-snmp.$MainDomain" }
 
 $ArgoCdNs = if ($env:ARGOCD_NAMESPACE) { $env:ARGOCD_NAMESPACE } else { "argocd" }
 $ForgejoNs = if ($env:FORGEJO_NAMESPACE) { $env:FORGEJO_NAMESPACE } else { "forgejo" }
@@ -151,10 +152,10 @@ Write-Host "   Status:      $ZabbixStatus"
 Write-Host "   Web UI:      https://$ZabbixHost"
 Write-Host "   Server FQDN: $ZabbixSrvHost (In-cluster: zabbix-zabbix-server:10051)"
 Write-Host "   Proxy FQDN:  $ZabbixProxyHost (In-cluster: zabbix-zabbix-proxy:10051, SQLite3)"
+Write-Host "   SNMP Traps:  $ZabbixSnmpHost:162/UDP (In-cluster: zabbix-snmptraps:162)"
 Write-Host "   Username:    $ZabbixUser"
 Write-Host "   Password:    $ZabbixPass"
 Write-Host "   Database:    TimescaleDB (timescale/timescaledb:2.17.2-pg16)"
-Write-Host "   SNMP Traps:  UDP Port 162 (zabbix-snmptraps)"
 Write-Host "   Agent:       Zabbix Agent 2 (DaemonSet on all nodes)"
 
 # 5. Traefik Gateway
@@ -175,10 +176,10 @@ Write-Host "`n[*] 6. LOCAL DNS / HOSTS RESOLUTION" -ForegroundColor Cyan
 Write-Host "   -----------------------------------------------------------------------------"
 Write-Host "   Ensure local domains resolve to 127.0.0.1:"
 Write-Host "   - Windows (Run PowerShell as Administrator):"
-Write-Host "     Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value `"127.0.0.1 $ArgoCdHost $ForgejoHost $HarborHost $ZabbixHost $ZabbixSrvHost $ZabbixProxyHost`"" -ForegroundColor Yellow
+Write-Host "     Add-Content -Path C:\Windows\System32\drivers\etc\hosts -Value `"127.0.0.1 $ArgoCdHost $ForgejoHost $HarborHost $ZabbixHost $ZabbixSrvHost $ZabbixProxyHost $ZabbixSnmpHost`"" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "   - Linux / macOS:"
-Write-Host "     echo `"127.0.0.1 $ArgoCdHost $ForgejoHost $HarborHost $ZabbixHost $ZabbixSrvHost $ZabbixProxyHost`" | sudo tee -a /etc/hosts" -ForegroundColor Yellow
+Write-Host "     echo `"127.0.0.1 $ArgoCdHost $ForgejoHost $HarborHost $ZabbixHost $ZabbixSrvHost $ZabbixProxyHost $ZabbixSnmpHost`" | sudo tee -a /etc/hosts" -ForegroundColor Yellow
 
 # 7. Applications
 if ($K8sOnline) {

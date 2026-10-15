@@ -73,6 +73,7 @@ zabbixServer:
       ports:
         - name: snmptraps
           containerPort: 1162
+          hostPort: 162
           protocol: UDP
       volumeMounts:
         - name: snmptraps-dir
@@ -205,6 +206,7 @@ extraManifests:
         - "zabbix.chetan.local"
         - "zbx-srv.chetan.local"
         - "zbx-proxy.chetan.local"
+        - "zbx-snmp.chetan.local"
       rules:
         - matches:
             - path:

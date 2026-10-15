@@ -17,6 +17,7 @@ spec:
     - "zabbix.chetan.local"
     - "zbx-srv.chetan.local"
     - "zbx-proxy.chetan.local"
+    - "zbx-snmp.chetan.local"
 
   rules:
     - matches:

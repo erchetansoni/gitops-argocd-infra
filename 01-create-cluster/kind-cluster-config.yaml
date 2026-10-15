@@ -11,6 +11,12 @@ nodes:
       - containerPort: 443
         hostPort: 443
         protocol: TCP
+
+      # For SNMP traps from external systems (hosts/clients) to the cluster (Zabbix, Nagios, etc.)
+      - containerPort: 162
+        hostPort: 162
+        protocol: UDP
+
   # - role: control-plane
   # - role: worker
   # - role: worker
