@@ -15,6 +15,7 @@ The cluster is created with host port mappings on ports `80` and `443` so that t
   * `hostPort: 80` -> `containerPort: 80` (HTTP Ingress / Gateway)
   * `hostPort: 443` -> `containerPort: 443` (HTTPS Ingress / Gateway)
   * `hostPort: 162` -> `containerPort: 162` (UDP SNMP Traps for Zabbix Proxy)
+  * `hostPort: 10051` -> `containerPort: 10051` (TCP Zabbix Proxy metric ingestion for external agents & hosts)
 * **Pre-flight readiness**: Waits until all `kube-system` control plane pods reach the `Ready` condition before completing.
 
 ---

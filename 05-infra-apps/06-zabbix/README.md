@@ -398,17 +398,58 @@ For smart sensors, vibration monitors, and IoT energy meters publishing to an MQ
 
 ---
 
-### 3. 🖥️ How to Add Linux & Windows Hosts (Servers & VMs)
+---
+
+### 3. 🖥️ How to Add Linux & Windows Hosts (Servers & Workstations)
+
+#### 🔄 Active vs. Passive Checks Explained
+
+| Feature | Passive Mode (`Windows by Zabbix agent`) | Active Mode (`Windows by Zabbix agent active`) |
+| :--- | :--- | :--- |
+| **Connection Flow** | **Server / Proxy ➡️ Agent** (Inbound to host) | **Agent ➡️ Server / Proxy** (Outbound from host) |
+| **Agent Port** | **10050 / TCP** (Must be open on Windows Firewall) | **None required inbound!** (Port 10050 not needed) |
+| **Server/Proxy Port** | None required on server side | **10051 / TCP** (Must be reachable from Agent) |
+| **NAT / DHCP / WiFi** | ❌ Fails if laptop IP changes or is behind NAT | ✅ **Best: Works seamlessly behind NAT / DHCP / VPN** |
+| **Network Outages** | ❌ Metrics lost during disconnects | ✅ **Agent buffers metrics locally until reconnected** |
+| **CPU / Server Overhead** | Higher (Server pollers wait on network sockets) | **Lowest (Agent collects locally and pushes in bulk)** |
+| **Template to Use** | `Windows by Zabbix agent` | `Windows by Zabbix agent active` |
+
+```text
+[ PASSIVE MODE ]
+Zabbix Proxy ──────── TCP 10050 (Inbound) ────────► Zabbix Agent (IN-LAP-CHETAN)
+   "Give me CPU!"                                      "Here is 15%"
+
+[ ACTIVE MODE - RECOMMENDED ]
+Zabbix Agent (IN-LAP-CHETAN) ──── TCP 10051 (Outbound) ────► Zabbix Proxy (zbx-proxy)
+   1. "What items should I check?"                        1. Sends item list
+   2. "Here is my CPU, RAM & disk data in a batch"        2. Stores in SQLite3 buffer
+```
+
+> [!IMPORTANT]
+> **Never link both Passive and Active templates to the same host!**  
+> If you attach both `Windows by Zabbix agent` and `Windows by Zabbix agent active`, Zabbix will block you with:  
+> `Cannot inherit item with key "agent.hostname"... because an item with the same key is already inherited`.  
+> **Fix**: Click **Unlink and clear** on `Windows by Zabbix agent` and link **ONLY** `Windows by Zabbix agent active`.
+
+---
 
 #### Step 1: Install Zabbix Agent 2 on the Target Host
 
+* **Windows Setup (GUI Installer)**:
+  Download the official MSI installer (`zabbix_agent2-7.4.15-windows-amd64-openssl.msi`) from [Zabbix Download Portal](https://www.zabbix.com/download_agents) and configure the setup wizard:
+
+  | Installer Field | Recommended Value | Why? |
+  | :--- | :--- | :--- |
+  | **Host name** | `IN-LAP-CHETAN` | **Must match the "Host name" in Zabbix Web UI exactly (case-sensitive).** |
+  | **Zabbix server IP/DNS** | `zbx-proxy.chetan.local` | Sets `Server=` in config. Whitelist of servers/proxies allowed to pull passive checks. |
+  | **Agent listen port** | `10050` | Standard default agent listen port. |
+  | **Server or Proxy for active checks** | `zbx-proxy.chetan.local` | Sets `ServerActive=` in config. **Address where agent pushes active metrics.** |
+
 * **Linux (Ubuntu / Debian)**:
   ```bash
-  # Download official Zabbix repository package:
   wget https://repo.zabbix.com/zabbix/7.4/ubuntu/pool/main/z/zabbix-release/zabbix-release_latest_7.4+ubuntu24.04_all.deb
   sudo dpkg -i zabbix-release_latest_7.4+ubuntu24.04_all.deb
-  sudo apt update
-  sudo apt install -y zabbix-agent2
+  sudo apt update && sudo apt install -y zabbix-agent2
   ```
 
 * **Linux (RHEL / AlmaLinux / Rocky Linux 9)**:
@@ -417,38 +458,45 @@ For smart sensors, vibration monitors, and IoT energy meters publishing to an MQ
   sudo dnf install -y zabbix-agent2
   ```
 
-* **Windows**:
-  Download the MSI installer from [Zabbix Download Portal](https://www.zabbix.com/download_agents) and install as a Windows Service.
+---
 
 #### Step 2: Configure `zabbix_agent2.conf`
-Edit `/etc/zabbix/zabbix_agent2.conf` (or `C:\Program Files\Zabbix Agent 2\zabbix_agent2.conf` on Windows):
+If configuring via file (`C:\Program Files\Zabbix Agent 2\zabbix_agent2.conf` on Windows or `/etc/zabbix/zabbix_agent2.conf` on Linux):
 
 ```ini
-# Passive Checks (Zabbix Server / Proxy pulls metrics from Agent on port 10050)
-Server=zbx-srv.chetan.local,zbx-proxy.chetan.local
+# Passive Checks (Authorized pollers)
+Server=zbx-proxy.chetan.local
 
-# Active Checks (Agent initiates outbound connection on port 10051)
-ServerActive=zbx-srv.chetan.local;zbx-proxy.chetan.local
+# Active Checks (Destination proxy for active telemetry)
+ServerActive=zbx-proxy.chetan.local
 
-# Hostname MUST match the "Host name" defined in the Zabbix Web UI
-Hostname=web-server-prod-01
+# Hostname matching Zabbix Web UI
+Hostname=IN-LAP-CHETAN
 ```
 
 Restart the agent service:
-```bash
-sudo systemctl restart zabbix-agent2
-sudo systemctl enable zabbix-agent2
-```
+* **Windows**: Open `services.msc` -> restart **Zabbix Agent 2**.
+* **Linux**: `sudo systemctl restart zabbix-agent2`
+
+---
 
 #### Step 3: Register Host in Zabbix Web UI
-1. Go to **Data collection > Hosts** -> **Create host**.
-2. **Host name**: `web-server-prod-01` (case-sensitive match with `Hostname` in config).
-3. **Templates**: Link `Linux by Zabbix agent active` (or `Windows by Zabbix agent active`).
-4. **Interfaces**: Click **Add** -> **Agent**:
-   * **IP address**: Target server IP.
-   * **Port**: `10050`.
-5. **Monitored by proxy**: Select `zbx-proxy` (or `(no proxy)` if communicating directly with the HA server cluster).
-6. Click **Add**. Within 30 seconds, the **ZBX** badge turns green and metrics begin streaming.
+1. Go to **Data collection > Hosts** -> click **Create host** (or edit existing).
+2. **Host Tab**:
+   * **Host name**: `IN-LAP-CHETAN` (must match `Hostname` in `zabbix_agent2.conf` exactly).
+   * **Templates**: Link **ONLY ONE** template:
+     * For Active checks: **`Windows by Zabbix agent active`**
+   * **Host groups**: `Discovered hosts` or `Workstations`.
+   * **Interfaces**: Add **Agent** interface with your laptop IP (`192.168.1.206`), Port `10050`.
+   * **Monitored by**: Click **`Proxy`** -> select **`zbx-proxy`** in the dropdown *(Do NOT select `Server`)*.
+3. Click **Update** (or **Add**). Within 30 seconds, the host begins streaming metrics to `zbx-proxy`.
+
+---
+
+#### 🌐 Why Port 10051 (Not 443)?
+* **Port 443 (HTTPS)**: Strictly for Traefik Gateway API web traffic (Zabbix Web UI and REST/JSON-RPC API).
+* **Port 10051 (TCP)**: Dedicated to the raw binary Zabbix protocol (`ZBXD\x01...`). Zabbix agents do **not** speak HTTP/HTTPS; sending raw agent data to port 443 will fail because Traefik expects an SSL/TLS handshake.
+* **Port 10051 Forwarding**: To allow external laptops (`IN-LAP-CHETAN`), switches, and PLCs to reach `zbx-proxy.chetan.local:10051`, KinD maps `hostPort: 10051` directly to the `zabbixProxy` pod.
 
 ---
 

@@ -140,6 +140,10 @@ zabbixProxy:
           containerPort: 1162
           hostPort: 162
           protocol: UDP
+        - name: zabbix-proxy
+          containerPort: 10051
+          hostPort: 10051
+          protocol: TCP
       volumeMounts:
         - name: snmptraps-dir
           mountPath: /var/lib/zabbix/snmptraps

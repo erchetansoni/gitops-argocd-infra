@@ -17,6 +17,11 @@ nodes:
         hostPort: 162
         protocol: UDP
 
+      # For Zabbix Proxy / Server metric ingestion from external agents, switches & hosts
+      - containerPort: 10051
+        hostPort: 10051
+        protocol: TCP
+
   # - role: control-plane
   # - role: worker
   # - role: worker
