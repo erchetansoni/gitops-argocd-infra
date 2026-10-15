@@ -106,7 +106,7 @@ fi
 # Step 3: Wait for Workloads Rollout
 echo ""
 echo "⏳ Step 3: Waiting for Zabbix workloads rollout to complete..."
-for d in "${RELEASE_NAME}-zabbix-server" "${RELEASE_NAME}-zabbix-web"; do
+for d in "${RELEASE_NAME}-zabbix-server" "${RELEASE_NAME}-zabbix-server-standby" "${RELEASE_NAME}-zabbix-web"; do
   if kubectl get deployment "$d" -n "${NAMESPACE}" >/dev/null 2>&1; then
     echo "   Checking deployment: $d..."
     kubectl rollout status deployment/"$d" -n "${NAMESPACE}" --timeout=180s || true
