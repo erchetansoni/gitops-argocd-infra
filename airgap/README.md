@@ -46,6 +46,7 @@ This guide details how to migrate and deploy this entire GitOps platform from lo
 | **Harbor Registry Chart**| `https://helm.goharbor.io` | `airgap/charts/harbor-1.19.2.tgz` |
 | **Forgejo Git Chart** | `oci://code.forgejo.org/...` | `airgap/charts/forgejo-17.2.0.tgz` |
 | **Forgejo Runner Chart**| `oci://codeberg.org/...` | `airgap/charts/forgejo-runner-0.7.6.tgz` |
+| **Zabbix Helm Chart** | `https://zabbix-community.github.io/helm-zabbix` | `airgap/charts/zabbix-7.1.0.tgz` |
 | **Argo CD Manifest** | `raw.githubusercontent.com/...` | `06-argocd/argocd-install-v3.5.3.yaml` |
 | **GitOps Git Source** | `github.com/erchetansoni/...` | In-cluster Forgejo `http://forgejo-http.forgejo.svc.cluster.local:3000/...` |
 | **Platform Helm Repo** | Public chart repos (`traefik.github.io`, etc.) | In-cluster service `http://airgap-helm-repo.argocd.svc:8080` |

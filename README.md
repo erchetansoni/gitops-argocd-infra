@@ -18,7 +18,7 @@ Workload microservices and per-environment manifests live in the companion repos
 ```mermaid
 flowchart TB
     subgraph Host["🖥️ Host Machine (Browser & Workstation)"]
-        Browser["🌐 Web Browser & Docker CLI\n(app1.chetan.local, app1.dev.chetan.local,\nargocd.chetan.local, cr.chetan.local, git.chetan.local)"]
+        Browser["🌐 Web Browser, Docker CLI & Monitoring\n(app1.chetan.local, app1.dev.chetan.local,\nargocd.chetan.local, cr.chetan.local, git.chetan.local,\nzabbix.chetan.local, zbx-srv/proxy/snmp.chetan.local)"]
         HostsFile["📄 /etc/hosts or Windows hosts\n(127.0.0.1 *.chetan.local)"]
         RootCATrust["🔒 Trusted Root CA Store\n(Avgol Internal Root CA)"]
     end
@@ -32,6 +32,7 @@ flowchart TB
         subgraph Ports["HostPort Bindings"]
             P80["Port 80 (HTTP)"]
             P443["Port 443 (HTTPS)"]
+            P162["Port 162/UDP (SNMP Traps)"]
         end
 
         subgraph IngressLayer["🌐 Gateway API & Ingress (traefik namespace)"]
@@ -46,6 +47,7 @@ flowchart TB
             HarborRegistry["Harbor Registry (harbor namespace)\n(cr.chetan.local OCI Registry)"]
             ForgejoService["Forgejo Git Service (forgejo namespace)\n(git.chetan.local Git & Actions)"]
             ForgejoRunner["Forgejo Actions Runner (forgejo-runner)\n(DinD CI/CD Runner)"]
+            ZabbixPlatform["Zabbix HA Monitoring (zabbix namespace)\n• HA Server Nodes (Active/Standby)\n• TimescaleDB 2.17 / PG16\n• SQLite3 Proxy + SNMP Trapper\n• Agent 2 DaemonSet"]
             ArgoCD["Argo CD Control Plane (argocd namespace)\n(App-of-Apps & ApplicationSets)"]
         end
 
@@ -65,13 +67,16 @@ flowchart TB
 
     Browser -->|HTTP :80| P80
     Browser -->|HTTPS :443| P443
+    Browser -->|UDP :162| P162
     P80 -->|301 Redirect to HTTPS| Traefik
     P443 --> Traefik
+    P162 -->|SNMP Traps| ZabbixPlatform
     Traefik --> MainGateway
     MainGateway --> TLSSecret
     MainGateway -->|HTTPRoute: argocd.chetan.local| ArgoCD
     MainGateway -->|HTTPRoute: cr.chetan.local| HarborRegistry
     MainGateway -->|HTTPRoute: git.chetan.local| ForgejoService
+    MainGateway -->|HTTPRoute: zabbix.chetan.local| ZabbixPlatform
     ForgejoRunner -.->|Polls & Executes| ForgejoService
 
     ArgoCD -->|Adopts & Manages| Traefik
@@ -79,6 +84,7 @@ flowchart TB
     ArgoCD -->|Adopts & Manages| HarborRegistry
     ArgoCD -->|Adopts & Manages| ForgejoService
     ArgoCD -->|Adopts & Manages| ForgejoRunner
+    ArgoCD -->|Adopts & Manages| ZabbixPlatform
     ArgoCD -->|Watches & Syncs| AppsRepo
 
     AppsRepo -.->|ApplicationSet Matrix| MainEnv
@@ -97,7 +103,7 @@ Each numbered directory encapsulates a specific stage of the platform bootstrap 
 | **[`02-traefik-controller`](file:///c:/Projects/My_Projects/gitops-argocd-infra/02-traefik-controller/README.md)** | Gateway API CRDs & Traefik v3 DaemonSet | `install-traefik-gateway-controller.sh`, `traefik-values.yaml` |
 | **[`03-cert-manager`](file:///c:/Projects/My_Projects/gitops-argocd-infra/03-cert-manager/README.md)** | cert-manager v1.21.2 & ClusterIssuer | `install-cert-manager.sh`, `cluster-issuer.yaml` |
 | **[`04-traefik-gateway`](file:///c:/Projects/My_Projects/gitops-argocd-infra/04-traefik-gateway/README.md)** | GatewayClass, Gateway listeners & TLS Certificate | `install-gatewayclass_and_gateway.yaml`, `cert/tls-generator/` |
-| **[`05-infra-apps`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/README.md)** | Platform infra apps (App-of-Apps parent and platform applications) | `app-of-apps.yaml`, `platform-apps.yaml`, `02-metrics-server/`, `03-harbor/`, `04-forgejo/`, `05-forgejo-runner/` |
+| **[`05-infra-apps`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/README.md)** | Platform infra apps (App-of-Apps parent and platform applications) | `app-of-apps.yaml`, `platform-apps.yaml`, `02-metrics-server/`, `03-harbor/`, `04-forgejo/`, `05-forgejo-runner/`, `06-zabbix/` |
 | **[`06-argocd`](file:///c:/Projects/My_Projects/gitops-argocd-infra/06-argocd/README.md)** | Argo CD install, ConfigMaps, HTTPRoute, adoption & Forgejo repo secret | `01-install-argocd.sh`, `02-adopt-infra-apps.sh`, `03-configure-forgejo-repo.sh`, `argocd-httproute.yaml` |
 | **[`07-apps`](file:///c:/Projects/My_Projects/gitops-argocd-infra/07-apps/README.md)** | Workload Git repo credentials & Root ApplicationSet | `01-install-repo-creds-secret.sh`, `02-install-root-app.sh`, `root-app/` |
 
@@ -224,17 +230,24 @@ bash 05-infra-apps/05-forgejo-runner/install-forgejo-runner.sh
 * Deploys the Forgejo Actions runner with Docker-in-Docker (DinD) sidecar.
 * Connects internally to Forgejo for native in-cluster CI/CD pipelines.
 
-### Step 10: Install Argo CD, Adopt Platform Apps & Configure Repo
+### Step 10: Install Zabbix Monitoring Platform (Optional Standalone)
+```bash
+bash 05-infra-apps/06-zabbix/install-zabbix.sh
+```
+* Deploys Zabbix HA cluster (active & standby server nodes), TimescaleDB 2.17.2, SQLite3 Proxy with decoupled SNMP Trapper sidecar (`hostPort: 162/UDP`), and Agent 2 DaemonSet.
+* Exposes Web UI at `https://zabbix.chetan.local`.
+
+### Step 11: Install Argo CD, Adopt Platform Apps & Configure Repo
 ```bash
 bash 06-argocd/01-install-argocd.sh
 bash 06-argocd/02-adopt-infra-apps.sh
 bash 06-argocd/03-configure-forgejo-repo.sh
 ```
 * Installs Argo CD in `argocd` namespace and exposes UI via `https://argocd.chetan.local`.
-* Adopts all 6 platform applications (`traefik`, `metrics-server`, `cert-manager`, `harbor`, `forgejo`, `forgejo-runner`) into declarative GitOps control.
+* Adopts all 7 platform applications (`traefik`, `metrics-server`, `cert-manager`, `harbor`, `forgejo`, `forgejo-runner`, `zabbix`) into declarative GitOps control.
 * Configures `Secret/forgejo-infra-repo-secret` for in-cluster GitOps synchronization via `http://forgejo-http.forgejo.svc.cluster.local:3000/...`.
 
-### Step 11: Connect Workload Repo & Deploy ApplicationSet
+### Step 12: Connect Workload Repo & Deploy ApplicationSet
 ```bash
 # 1. Configure GitHub token in root .env:
 # Ensure GITHUB_TOKEN="github_pat_..." is set in your root .env
@@ -337,6 +350,7 @@ Every script in this repository supports configurable environment variables, com
 | **[`05-infra-apps/04-forgejo/install-forgejo.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/04-forgejo/install-forgejo.sh)** | Installs Forgejo Git service & verifies `/api/v1/version` | None | `NAMESPACE`: `"forgejo"`<br>`RELEASE_NAME`: `"forgejo"`<br>`CHART_VERSION`: `"17.2.0"`<br>`FORGEJO_HOST`: `"git.chetan.local"` | `./install-forgejo.sh` |
 | **[`05-infra-apps/04-forgejo/sync-repo-to-forgejo.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/04-forgejo/sync-repo-to-forgejo.sh)** | Seeds repo via API, configures dual-remote, pushes branch | None | `FORGEJO_HOST`: `"git.chetan.local"`<br>`FORGEJO_USER`: `"forgejo_admin"`<br>`FORGEJO_PASS`: `"Forgejo12345"`<br>`FORGEJO_REPO_NAME`: `"gitops-argocd-infra"`<br>`GIT_REMOTE_NAME`: `"forgejo"` | `./sync-repo-to-forgejo.sh` |
 | **[`05-infra-apps/05-forgejo-runner/install-forgejo-runner.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/05-forgejo-runner/install-forgejo-runner.sh)** | Generates runner token from pod & deploys DinD runner | None | `NAMESPACE`: `"forgejo-runner"`<br>`RELEASE_NAME`: `"forgejo-runner"`<br>`CHART_VERSION`: `"0.7.6"`<br>`FORGEJO_NAMESPACE`: `"forgejo"`<br>`FORGEJO_INSTANCE_URL`: `"http://forgejo-http.forgejo.svc.cluster.local:3000"`<br>`RUNNER_SECRET_NAME`: `"forgejo-runner-secret"` | `./install-forgejo-runner.sh` |
+| **[`05-infra-apps/06-zabbix/install-zabbix.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/05-infra-apps/06-zabbix/install-zabbix.sh)** | Installs Zabbix HA cluster, TimescaleDB, SQLite3 Proxy & SNMP Trapper | None | `NAMESPACE`: `"zabbix"`<br>`RELEASE_NAME`: `"zabbix"`<br>`CHART_VERSION`: `"7.1.0"`<br>`ZABBIX_HOST`: `"zabbix.chetan.local"`<br>`ZABBIX_SRV_HOST`: `"zbx-srv.chetan.local"`<br>`ZABBIX_PROXY_HOST`: `"zbx-proxy.chetan.local"`<br>`ZABBIX_USER`: `"Admin"`<br>`ZABBIX_PASS`: `"zabbix"` | `./install-zabbix.sh` |
 
 ---
 
@@ -345,7 +359,7 @@ Every script in this repository supports configurable environment variables, com
 | Script | Purpose | Arguments / Flags | Environment Variables (with Defaults) | Example Usage |
 | :--- | :--- | :--- | :--- | :--- |
 | **[`06-argocd/01-install-argocd.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/06-argocd/01-install-argocd.sh)** | Installs Argo CD, applies configmaps & exposes UI | None | `ARGOCD_NAMESPACE` / `NAMESPACE`: `"argocd"`<br>`ARGOCD_HOST`: `"argocd.chetan.local"`<br>`ARGOCD_VERSION`: `"3.5.3"` | `./01-install-argocd.sh` |
-| **[`06-argocd/02-adopt-infra-apps.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/06-argocd/02-adopt-infra-apps.sh)** | Adopts 6 infra apps; deploys `airgap-helm-repo` if offline | None | `ARGOCD_NAMESPACE` / `NAMESPACE`: `"argocd"`<br>`INSTALL_MODE`: `"online"` or `"airgap"`<br>`INFRA_MANIFEST`: auto-detects `platform-apps.yaml` | `INSTALL_MODE=airgap ./02-adopt-infra-apps.sh` |
+| **[`06-argocd/02-adopt-infra-apps.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/06-argocd/02-adopt-infra-apps.sh)** | Adopts 7 infra apps; deploys `airgap-helm-repo` if offline | None | `ARGOCD_NAMESPACE` / `NAMESPACE`: `"argocd"`<br>`INSTALL_MODE`: `"online"` or `"airgap"`<br>`INFRA_MANIFEST`: auto-detects `platform-apps.yaml` | `INSTALL_MODE=airgap ./02-adopt-infra-apps.sh` |
 | **[`06-argocd/03-configure-forgejo-repo.sh`](file:///c:/Projects/My_Projects/gitops-argocd-infra/06-argocd/03-configure-forgejo-repo.sh)** | Creates repo secret, tests connectivity & applies `app-of-apps.yaml` | None | `ARGOCD_NAMESPACE` / `NAMESPACE`: `"argocd"`<br>`FORGEJO_INTERNAL_URL`: `"http://forgejo-http.forgejo.svc.cluster.local:3000/forgejo_admin/gitops-argocd-infra.git"`<br>`FORGEJO_USER`: `"forgejo_admin"`<br>`FORGEJO_PASS`: `"Forgejo12345"`<br>`SECRET_NAME`: `"forgejo-infra-repo-secret"` | `./03-configure-forgejo-repo.sh` |
 
 ---
@@ -383,6 +397,10 @@ Add the following mappings to your local hosts file:
 127.0.0.1 argocd.chetan.local
 127.0.0.1 cr.chetan.local
 127.0.0.1 git.chetan.local
+127.0.0.1 zabbix.chetan.local
+127.0.0.1 zbx-srv.chetan.local
+127.0.0.1 zbx-proxy.chetan.local
+127.0.0.1 zbx-snmp.chetan.local
 127.0.0.1 app1.chetan.local
 127.0.0.1 app2.chetan.local
 127.0.0.1 app3.chetan.local
@@ -425,6 +443,15 @@ curl -k https://app1.dev.chetan.local/
 curl -k https://argocd.chetan.local/
 curl -k https://cr.chetan.local/
 curl -k https://git.chetan.local/
+curl -k https://zabbix.chetan.local/
+
+# Test Zabbix HA Cluster Nodes in PostgreSQL
+kubectl exec -n zabbix zabbix-postgresql-0 -- psql -U zabbix -d zabbix -c \
+  "SELECT name, address, port, lastaccess, status FROM ha_node;"
+
+# Test Zabbix Proxy Runtime State (State 2 = Online)
+kubectl exec -n zabbix zabbix-postgresql-0 -- psql -U zabbix -d zabbix -c \
+  "SELECT proxyid, lastaccess, version, state FROM proxy_rtdata;"
 
 # Test Harbor Docker Registry CLI Login
 docker login cr.chetan.local -u admin -p Harbor12345

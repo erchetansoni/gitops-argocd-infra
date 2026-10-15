@@ -93,6 +93,7 @@ run_step "05b" "Install Harbor Private Registry"           ./05-infra-apps/03-ha
 run_step "05c" "Install Forgejo In-Cluster Git Service"    ./05-infra-apps/04-forgejo/install-forgejo.sh
 run_step "05d" "Sync Local Git Repo to Forgejo"            ./05-infra-apps/04-forgejo/sync-repo-to-forgejo.sh
 run_step "05e" "Install Forgejo Actions Runner"            ./05-infra-apps/05-forgejo-runner/install-forgejo-runner.sh
+run_step "05f" "Install Zabbix Monitoring Platform"         ./05-infra-apps/06-zabbix/install-zabbix.sh
 run_step "06a" "Install Argo CD GitOps Server"             ./06-argocd/01-install-argocd.sh
 run_step "06b" "Adopt Infrastructure Apps into Argo CD"    ./06-argocd/02-adopt-infra-apps.sh
 run_step "06c" "Register Forgejo Git Repo in Argo CD"      ./06-argocd/03-configure-forgejo-repo.sh

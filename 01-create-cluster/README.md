@@ -12,8 +12,10 @@ The cluster is created with host port mappings on ports `80` and `443` so that t
 * **Cluster Name**: `gitops-demo-cluster`
 * **Kubernetes Version**: `v1.37.0` (via `kindest/node:v1.37.0`)
 * **Host Port Bindings**:
-  * `hostPort: 80` -> `containerPort: 80` (HTTP)
-  * `hostPort: 443` -> `containerPort: 443` (HTTPS)
+  * `hostPort: 80` -> `containerPort: 80` (HTTP Ingress / Gateway)
+  * `hostPort: 443` -> `containerPort: 443` (HTTPS Ingress / Gateway)
+  * `hostPort: 162` -> `containerPort: 162` (UDP SNMP Traps for Zabbix Proxy)
+  * `hostPort: 10051` -> `containerPort: 10051` (TCP Zabbix Proxy metric ingestion for external agents & hosts)
 * **Pre-flight readiness**: Waits until all `kube-system` control plane pods reach the `Ready` condition before completing.
 
 ---
@@ -126,7 +128,7 @@ kind create cluster --config 01-create-cluster\kind-cluster-config.yaml
 
 ### Step 2: (Recommended) Pre-Load Container Images into KinD
 
-Pre-loading all platform container images (Traefik, cert-manager, Metrics Server, Argo CD, Harbor) directly into the KinD node eliminates initial image download delays, network bandwidth bottlenecks, and pod crash loops during application rollout.
+Pre-loading all platform container images (Traefik, cert-manager, Metrics Server, Harbor, Forgejo, Forgejo Runner, Zabbix, and Argo CD) directly into the KinD node eliminates initial image download delays, network bandwidth bottlenecks, and pod crash loops during application rollout.
 
 #### 🪟 Windows PowerShell
 ```powershell

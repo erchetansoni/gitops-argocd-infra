@@ -73,6 +73,24 @@ All platform components are declared in [platform-apps.yaml](platform-apps.yaml)
   * Connects internally to Forgejo via cluster service `http://forgejo-http.forgejo.svc.cluster.local:3000`.
   * Synchronized via Argo CD sync-wave `3` after Forgejo (sync-wave `2`) is running.
 
+### 7. Zabbix Monitoring Platform (`06-zabbix/`)
+* **Argo CD Application Name**: `zabbix`
+* **Helm Chart**: `helm-zabbix` (`v7.1.0`, app `v7.4.15`) from `https://zabbix-community.github.io/helm-zabbix`
+* **Namespace**: `zabbix`
+* **Host / Subdomains**:
+  * Web UI: `zabbix.chetan.local`
+  * Active Server Daemon: `zbx-srv.chetan.local` (Port 10051)
+  * Active SQLite3 Proxy: `zbx-proxy.chetan.local` (Port 10051)
+  * SNMP Trapper: `zbx-snmp.chetan.local:162/UDP`
+* **Configuration Highlights**:
+  * **Native High Availability (HA) Cluster**: Dual server nodes (`zabbix-zabbix-server` Active, `zabbix-zabbix-server-standby` Standby) running against TimescaleDB with automated failover via PostgreSQL `ha_node` table coordination.
+  * **Decoupled SNMP Trapper (Approach C)**: `zabbix-snmptraps` sidecar container attached directly to the Zabbix Proxy (`zabbix-zabbix-proxy-0`) with `hostPort: 162/UDP`, eliminating server port contention and shared-storage bottlenecks.
+  * **Active SQLite3 Zabbix Proxy**: Multi-node cluster configuration via `ZBX_SERVER_HOST: "zabbix-zabbix-server;zabbix-zabbix-server-standby"` with real-time runtime health (shows **Online** green badge in Web UI).
+  * **TimescaleDB 2.17.2 & PostgreSQL 16**: High-performance hypertable compression and partitioning with 10Gi persistent storage.
+  * **Zabbix Agent 2**: Go-based node agent deployed as a cluster-wide Kubernetes `DaemonSet`.
+  * Gateway API HTTPRoute (`zabbix-web`) attached to `main-gateway` with wildcard TLS termination.
+* **Documentation & Operations Guide**: See [`06-zabbix/README.md`](06-zabbix/README.md) for how to add network switches (SNMP), PLCs (Modbus TCP/SNMP/MQTT), and hosts (Agent 2), plus complete details on `install-zabbix.sh`, environment variables, arguments, and manifest breakdowns.
+
 ---
 
 ## File Structure
@@ -102,8 +120,14 @@ All platform components are declared in [platform-apps.yaml](platform-apps.yaml)
 │   ├── forgejo-runner-values.yaml      # Forgejo Runner Helm values (DinD sidecar)
 │   ├── install-forgejo-runner.sh       # Pre-install / standalone install script
 │   └── README.md                       # Documentation & Actions runner guide
+├── 06-zabbix/
+│   ├── install-zabbix.sh               # Pre-install / standalone install script
+│   ├── zabbix-application.yaml         # Individual Argo CD Application manifest
+│   ├── zabbix-httproute.yaml           # Gateway API HTTPRoute for zabbix.chetan.local
+│   ├── zabbix-values.yaml              # Zabbix Helm values (HA nodes, Proxy SNMP sidecar, TimescaleDB)
+│   └── README.md                       # Comprehensive HA architecture & verification guide
 ├── app-of-apps.yaml                    # Parent Argo CD Application (App-of-Apps) tracking Forgejo main
-├── platform-apps.yaml                  # Declarative list of all 6 platform child applications
+├── platform-apps.yaml                  # Declarative list of all 7 platform child applications
 └── README.md                           # Documentation
 ```
 
@@ -113,7 +137,7 @@ All platform components are declared in [platform-apps.yaml](platform-apps.yaml)
 
 Instead of manual `helm install` commands drifting over time, the platform uses the **GitOps App-of-Apps** pattern:
 
-1. **Child Applications List** (`platform-apps.yaml`): Declares the desired configuration, charts, and values for all 6 infrastructure apps.
+1. **Child Applications List** (`platform-apps.yaml`): Declares the desired configuration, charts, and values for all 7 infrastructure apps.
 2. **Parent Orchestrator** (`app-of-apps.yaml`): A top-level Argo CD Application (`metadata.name: infra-apps`) that continuously watches the in-cluster Forgejo repository on branch `main`.
 3. **Adoption**: The script [06-argocd/02-adopt-infra-apps.sh](../06-argocd/02-adopt-infra-apps.sh) injects Helm ownership annotations and applies [platform-apps.yaml](platform-apps.yaml) via Server-Side Apply.
 4. **Continuous Sync**: When [06-argocd/03-configure-forgejo-repo.sh](../06-argocd/03-configure-forgejo-repo.sh) applies [app-of-apps.yaml](app-of-apps.yaml), Argo CD establishes a live GitOps feedback loop. Any commit pushed to Forgejo `main` automatically updates the cluster.
@@ -133,6 +157,7 @@ kubectl get applications -n argocd
 # harbor                       Synced   Healthy
 # forgejo                      Synced   Healthy
 # forgejo-runner               Synced   Healthy
+# zabbix                       Synced   Healthy
 ```
 
 Verify that Metrics Server is working:

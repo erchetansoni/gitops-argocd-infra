@@ -129,5 +129,6 @@ echo "   - cert-manager (cert-manager)"
 echo "   - Harbor Container Registry (harbor)"
 echo "   - Forgejo Git Service (forgejo)"
 echo "   - Forgejo Actions Runner (forgejo-runner)"
+echo "   - Zabbix Monitoring Platform (zabbix)"
 echo "================================================================="
 
