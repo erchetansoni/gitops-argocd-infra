@@ -53,6 +53,10 @@ spec:
               value: "true"
             - name: ZBX_DBEXTENDEDSTATUS
               value: "1"
+            - name: ZBX_AUTOHANODENAME
+              value: "hostname"
+            - name: ZBX_AUTONODEADDRESS
+              value: "hostname"
           resources:
             requests:
               cpu: 100m
@@ -91,7 +95,7 @@ spec:
             pullPolicy: IfNotPresent
           ZBX_PROXYMODE: 0
           ZBX_HOSTNAME: "zbx-proxy"
-          ZBX_SERVER_HOST: zabbix-zabbix-server
+          ZBX_SERVER_HOST: "zabbix-zabbix-server,zabbix-zabbix-server-standby"
           ZBX_SERVER_PORT: 10051
           service:
             type: ClusterIP
@@ -134,7 +138,7 @@ spec:
             repository: zabbix/zabbix-agent2
             tag: "alpine-7.4.15"
             pullPolicy: IfNotPresent
-          ZBX_SERVER_HOST: "zabbix-zabbix-server,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+          ZBX_SERVER_HOST: "zabbix-zabbix-server,zabbix-zabbix-server-standby,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
           ZBX_SERVER_PORT: 10051
           ZBX_PASSIVE_ALLOW: true
           ZBX_ACTIVE_ALLOW: false
@@ -183,6 +187,99 @@ spec:
                   backendRefs:
                     - name: zabbix-zabbix-web
                       port: 80
+          - apiVersion: v1
+            kind: Service
+            metadata:
+              name: zabbix-zabbix-server-standby
+              namespace: zabbix
+              labels:
+                app.kubernetes.io/name: zabbix
+                app.kubernetes.io/component: server-standby
+            spec:
+              type: ClusterIP
+              selector:
+                app.kubernetes.io/name: zabbix
+                app.kubernetes.io/component: server-standby
+              ports:
+                - name: zabbix-server
+                  port: 10051
+                  targetPort: 10051
+                  protocol: TCP
+          - apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: zabbix-zabbix-server-standby
+              namespace: zabbix
+              labels:
+                app.kubernetes.io/name: zabbix
+                app.kubernetes.io/component: server-standby
+            spec:
+              replicas: 1
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: zabbix
+                  app.kubernetes.io/component: server-standby
+              strategy:
+                type: Recreate
+              template:
+                metadata:
+                  labels:
+                    app.kubernetes.io/name: zabbix
+                    app.kubernetes.io/component: server-standby
+                    app.kubernetes.io/instance: zabbix
+                spec:
+                  serviceAccountName: zabbix
+                  containers:
+                    - name: zabbix-server
+                      image: zabbix/zabbix-server-pgsql:alpine-7.4.15
+                      imagePullPolicy: IfNotPresent
+                      ports:
+                        - name: zabbix-server
+                          containerPort: 10051
+                          protocol: TCP
+                        - name: zabbix-jmx
+                          containerPort: 10052
+                          protocol: TCP
+                      env:
+                        - name: DB_SERVER_HOST
+                          value: zabbix-postgresql
+                        - name: DB_SERVER_PORT
+                          value: "5432"
+                        - name: POSTGRES_USER
+                          valueFrom:
+                            secretKeyRef:
+                              name: zabbix-db-access
+                              key: user
+                              optional: true
+                        - name: POSTGRES_PASSWORD
+                          valueFrom:
+                            secretKeyRef:
+                              name: zabbix-db-access
+                              key: password
+                        - name: POSTGRES_DB
+                          value: zabbix
+                        - name: ENABLE_TIMESCALEDB
+                          value: "true"
+                        - name: ZBX_DBEXTENDEDSTATUS
+                          value: "1"
+                        - name: ZBX_STARTPOLLERS
+                          value: "5"
+                        - name: ZBX_STARTTRAPPERS
+                          value: "5"
+                        - name: ZBX_AUTOHANODENAME
+                          value: "hostname"
+                        - name: ZBX_AUTONODEADDRESS
+                          value: "hostname"
+                        - name: ZBX_NODEADDRESS
+                          valueFrom:
+                            fieldRef:
+                              fieldPath: status.podIP
+                      resources:
+                        requests:
+                          cpu: 100m
+                          memory: 256Mi
+                        limits:
+                          memory: 1Gi
   destination:
     server: https://kubernetes.default.svc
     namespace: zabbix
