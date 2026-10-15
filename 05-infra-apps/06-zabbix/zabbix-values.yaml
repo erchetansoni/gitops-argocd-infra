@@ -60,30 +60,10 @@ zabbixServer:
       value: "true"
     - name: ZBX_DBEXTENDEDSTATUS
       value: "1"
-    - name: ZBX_STARTSNMPTRAPPERS
-      value: "1"
     - name: ZBX_STARTPOLLERS
       value: "5"
     - name: ZBX_STARTTRAPPERS
       value: "5"
-  extraContainers:
-    - name: zabbix-snmptraps
-      image: "zabbix/zabbix-snmptraps:alpine-7.4.15"
-      imagePullPolicy: IfNotPresent
-      ports:
-        - name: snmptraps
-          containerPort: 1162
-          hostPort: 162
-          protocol: UDP
-      volumeMounts:
-        - name: snmptraps-dir
-          mountPath: /var/lib/zabbix/snmptraps
-  extraVolumes:
-    - name: snmptraps-dir
-      emptyDir: {}
-  extraVolumeMounts:
-    - name: snmptraps-dir
-      mountPath: /var/lib/zabbix/snmptraps
   resources:
     requests:
       cpu: 100m
@@ -142,6 +122,29 @@ zabbixProxy:
   persistentVolume:
     enabled: true
     size: 2Gi
+  extraEnv:
+    - name: ZBX_STARTSNMPTRAPPER
+      value: "1"
+    - name: ZBX_STARTSNMPTRAPPERS
+      value: "1"
+  extraContainers:
+    - name: zabbix-snmptraps
+      image: "zabbix/zabbix-snmptraps:alpine-7.4.15"
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: snmptraps
+          containerPort: 1162
+          hostPort: 162
+          protocol: UDP
+      volumeMounts:
+        - name: snmptraps-dir
+          mountPath: /var/lib/zabbix/snmptraps
+  extraVolumes:
+    - name: snmptraps-dir
+      emptyDir: {}
+  extraVolumeMounts:
+    - name: snmptraps-dir
+      mountPath: /var/lib/zabbix/snmptraps
   resources:
     requests:
       cpu: 50m
@@ -187,7 +190,7 @@ extraManifests:
       type: ClusterIP
       selector:
         app.kubernetes.io/name: zabbix
-        app.kubernetes.io/component: server
+        app.kubernetes.io/component: proxy
       ports:
         - name: snmptraps-udp
           port: 162
