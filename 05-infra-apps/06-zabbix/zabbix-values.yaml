@@ -106,6 +106,10 @@ zabbixWeb:
     type: ClusterIP
     port: 80
   extraEnv:
+    - name: ZBX_SERVER_HOST
+      value: "zabbix-zabbix-server"
+    - name: ZBX_SERVER_PORT
+      value: "10051"
     - name: ZBX_DBEXTENDEDSTATUS
       value: "1"
     - name: PHP_TZ
