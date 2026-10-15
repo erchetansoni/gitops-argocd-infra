@@ -18,7 +18,7 @@ Argo CD automates the deployment of the desired application states declared in G
 ```
 06-argocd/
 ├── 01-install-argocd.sh           # Installs Argo CD, applies configs, and prints admin password
-├── 02-adopt-infra-apps.sh         # Adopts Traefik, Metrics Server, cert-manager, Harbor, and Forgejo
+├── 02-adopt-infra-apps.sh         # Adopts Traefik, Metrics Server, cert-manager, Harbor, Forgejo, and Zabbix
 ├── 03-configure-forgejo-repo.sh   # Configures in-cluster Forgejo repo secret in Argo CD
 ├── argocd-configmaps.yaml         # ConfigMaps: argocd-cm and argocd-cmd-params-cm
 ├── argocd-httproute.yaml          # Gateway API HTTPRoute for argocd.chetan.local
@@ -75,7 +75,7 @@ This will:
 ```bash
 bash 06-argocd/02-adopt-infra-apps.sh
 ```
-Takes pre-installed infrastructure applications (Traefik, Metrics Server, cert-manager, Harbor, Forgejo, and Forgejo Runner) and brings them under Argo CD GitOps management without terminating running pods.
+Takes pre-installed infrastructure applications (Traefik, Metrics Server, cert-manager, Harbor, Forgejo, Forgejo Runner, and Zabbix) and brings them under Argo CD GitOps management without terminating running pods.
 
 ### Step 3: Configure In-Cluster Forgejo Repository Credentials & Deploy App-of-Apps
 ```bash
@@ -103,7 +103,7 @@ In an air-gapped cluster with no internet route, Argo CD's `repo-server` cannot 
 ### Why use `airgap-helm-repo` instead of in-cluster Harbor or Forgejo?
 
 1. **Avoids the Harbor Circular Dependency ("Chicken-and-Egg")**:
-   Harbor is one of the 6 applications being managed by Argo CD! If Harbor's Helm chart is hosted inside Harbor, and Harbor crashes or is restarting during an upgrade, Argo CD **could not even download the Harbor Helm chart to repair it**. `airgap-helm-repo` is completely independent.
+   Harbor is one of the 7 applications being managed by Argo CD! If Harbor's Helm chart is hosted inside Harbor, and Harbor crashes or is restarting during an upgrade, Argo CD **could not even download the Harbor Helm chart to repair it**. `airgap-helm-repo` is completely independent.
 2. **Zero Authentication Protocol Matching**:
    Public Helm repositories use unauthenticated HTTP `GET` requests (`index.yaml` + `*.tgz`). `airgap-helm-repo` replicates this exact behavior over internal HTTP port 8080 with **zero tokens, passwords, or certificate verifications**. Harbor requires OCI login credentials, and Forgejo requires Git/Package tokens.
 3. **Stateless & Instant Boot**:
