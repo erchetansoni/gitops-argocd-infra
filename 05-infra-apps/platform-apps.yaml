@@ -479,7 +479,7 @@ items:
                   memory: 256Mi
             zabbixServer:
               enabled: true
-              replicaCount: 2
+              replicaCount: 1
               image:
                 repository: zabbix/zabbix-server-pgsql
                 tag: "alpine-7.4.15"
@@ -640,4 +640,3 @@ items:
           jsonPointers:
             - /spec/volumeClaimTemplates
             - /spec/persistentVolumeClaimRetentionPolicy
-
