@@ -89,6 +89,7 @@ All platform components are declared in [platform-apps.yaml](platform-apps.yaml)
   * **TimescaleDB 2.17.2 & PostgreSQL 16**: High-performance hypertable compression and partitioning with 10Gi persistent storage.
   * **Zabbix Agent 2**: Go-based node agent deployed as a cluster-wide Kubernetes `DaemonSet`.
   * Gateway API HTTPRoute (`zabbix-web`) attached to `main-gateway` with wildcard TLS termination.
+* **Documentation & Installer Reference**: See [`06-zabbix/README.md`](06-zabbix/README.md) for complete details on `install-zabbix.sh`, environment variables, arguments, and manifest breakdowns.
 
 ---
 

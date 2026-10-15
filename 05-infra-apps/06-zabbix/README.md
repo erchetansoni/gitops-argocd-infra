@@ -87,15 +87,136 @@ Enterprise-grade distributed monitoring platform deployed natively on Kubernetes
 
 ---
 
-## 🚀 Installation & Usage
+---
 
-### 1. Automated Installation
-Run the dedicated installation script:
+## 📂 File Inventory & Directory Structure
+
+```
+05-infra-apps/06-zabbix/
+├── install-zabbix.sh           # Automated installer script (Helm, HTTPRoute, DB bootstrap)
+├── zabbix-values.yaml          # Helm values (HA nodes, TimescaleDB, Proxy SNMP sidecar)
+├── zabbix-httproute.yaml       # Gateway API HTTPRoute connecting zabbix.chetan.local
+├── zabbix-application.yaml     # Standalone Argo CD Application manifest for GitOps
+└── README.md                   # Comprehensive architecture, operational guide & verification
+```
+
+### Detailed Breakdown of Files
+
+1. **[`install-zabbix.sh`](install-zabbix.sh)**:
+   * **Purpose**: Orchestrates the standalone or pre-Argo CD automated installation of the entire Zabbix monitoring platform.
+   * **Key Capabilities**:
+     * Automatically sources parent `.env` configuration via `load-env.sh`.
+     * Automatically detects local offline Helm chart tarballs (`airgap/charts/zabbix-*.tgz`) or connects to the online repository (`zabbix-community`).
+     * Executes `helm upgrade --install` with custom values and database secrets.
+     * Applies Gateway API `HTTPRoute` with automatic domain interpolation (`sed s|chetan.local|${MAIN_DOMAIN}|g`).
+     * Monitors workload rollouts for deployments (`server`, `server-standby`, `web`), statefulsets (`postgresql`, `proxy`), and daemonsets (`agent`).
+     * Bootstraps PostgreSQL database tables (`interface`, `proxy`, `proxy_rtdata`) so that the active proxy (`zbx-proxy`) and server agent interface are instantly `Online` without manual Web UI setup.
+     * Displays a clean verification summary with URLs, credentials, and DNS records.
+
+2. **[`zabbix-values.yaml`](zabbix-values.yaml)**:
+   * **Purpose**: Centralized Helm configuration defining all components and container parameters.
+   * **Key Configurations**:
+     * `postgresql`: Deploys TimescaleDB 2.17.2 on PostgreSQL 16 with 10Gi persistent storage and 150 max connections.
+     * `zabbixServer`: Configures the primary active server pod with `ZBX_AUTOHANODENAME: hostname`, `ENABLE_TIMESCALEDB: "true"`, and `ZBX_DBEXTENDEDSTATUS: "1"`.
+     * `extraManifests`: Declares the secondary standby server node (`Deployment/zabbix-zabbix-server-standby`) enabling native active-passive HA cluster mode.
+     * `zabbixProxy`: Configures the SQLite3 proxy daemon, attaches the `zabbix-snmptraps` sidecar container binding to `hostPort: 162/UDP`, mounts shared `snmptraps-dir` (`emptyDir`), creates Service `zabbix-snmptraps`, and sets `ZBX_SERVER_HOST: "zabbix-zabbix-server;zabbix-zabbix-server-standby"`.
+     * `zabbixAgent`: Deploys modern Go-based Agent 2 as a cluster-wide Kubernetes `DaemonSet` monitoring all nodes.
+     * `zabbixWeb`: Configures Nginx frontend, connects to cluster servers, and enables Gateway API HTTP routing.
+     * `zabbixWebservice`: Deploys Google Chrome headless web service for scheduled dashboard and report PDF generation.
+
+3. **[`zabbix-httproute.yaml`](zabbix-httproute.yaml)**:
+   * **Purpose**: Kubernetes Gateway API `HTTPRoute` resource attaching `zabbix.chetan.local` to `Gateway/main-gateway` in the `default` namespace.
+   * **Routing**: Matches path `/` (PathPrefix) and forwards cleartext traffic to Service `zabbix-zabbix-web:80`, with TLS terminated at the Gateway using the `*.chetan.local` wildcard certificate.
+
+4. **[`zabbix-application.yaml`](zabbix-application.yaml)**:
+   * **Purpose**: Declarative Argo CD `Application` Custom Resource manifest for GitOps management.
+   * **Tracking**: Points directly to Helm repository `https://zabbix-community.github.io/helm-zabbix` chart `zabbix` version `7.1.0` with full in-line `valuesObject`.
+   * **Sync Policies**: Configured with `automated` sync, `prune: false`, `selfHeal: true`, and sync-wave `2` for seamless platform orchestration.
+
+---
+
+## 🛠️ Automated Installer Script Guide (`install-zabbix.sh`)
+
+### How to Use
+
+The script can be executed from Git Bash, Linux/macOS terminal, or Windows PowerShell:
+
+#### 1. Standard Execution (Default Settings)
 ```bash
 ./05-infra-apps/06-zabbix/install-zabbix.sh
 ```
 
-### 2. Local DNS Setup
+#### 2. Custom Domain Execution
+```bash
+MAIN_DOMAIN="mycompany.local" ./05-infra-apps/06-zabbix/install-zabbix.sh
+```
+
+#### 3. Custom Credentials & Namespace
+```bash
+ZABBIX_NAMESPACE="monitoring" \
+ZABBIX_ADMIN_PASSWORD="SuperSecretPassword123" \
+ZABBIX_DB_PASSWORD="DbSecretPassword123" \
+./05-infra-apps/06-zabbix/install-zabbix.sh
+```
+
+#### 4. Windows PowerShell Execution
+```powershell
+bash 05-infra-apps/06-zabbix/install-zabbix.sh
+```
+
+---
+
+### Command-Line Arguments & Flags
+
+`install-zabbix.sh` is designed for seamless GitOps and CI/CD pipelines following twelve-factor app principles:
+* **Arguments**: Accepts zero mandatory positional arguments.
+* **Auto-Discovery**: Automatically searches parent directories for `load-env.sh` and extracts variables from root `.env`.
+* **Path Conversion**: Automatically detects MSYS2/Git Bash environments and invokes `cygpath -w` to ensure Windows paths are passed properly to Helm and kubectl.
+* **Offline Detection**: Automatically probes for offline `.tgz` chart archives in `airgap/charts/` before attempting to reach external Helm repositories.
+
+---
+
+### Configuration Variables & Environment Variables
+
+All variables have robust built-in defaults and can be overridden via shell environment variables or `.env`:
+
+| Environment Variable | Default Value | Description |
+| :--- | :--- | :--- |
+| **`MAIN_DOMAIN`** | `chetan.local` | Base domain used to derive all service FQDNs. |
+| **`ZABBIX_HOST`** | `zabbix.${MAIN_DOMAIN}` | FQDN for the Web UI and Gateway API HTTPRoute (`zabbix.chetan.local`). |
+| **`ZABBIX_SRV_HOST`** | `zbx-srv.${MAIN_DOMAIN}` | FQDN for the active server daemon (`zbx-srv.chetan.local`). |
+| **`ZABBIX_PROXY_HOST`** | `zbx-proxy.${MAIN_DOMAIN}` | FQDN for the proxy buffer daemon (`zbx-proxy.chetan.local`). |
+| **`ZABBIX_NAMESPACE`** *(or `NAMESPACE`)* | `zabbix` | Target Kubernetes namespace. Created automatically if missing. |
+| **`ZABBIX_RELEASE_NAME`** *(or `RELEASE_NAME`)* | `zabbix` | Helm release name. |
+| **`ZABBIX_HELM_REPO_URL`** | `https://zabbix-community.github.io/helm-zabbix` | Official Helm chart repository URL. |
+| **`ZABBIX_HELM_CHART`** | `zabbix-community/zabbix` | Helm chart reference name. |
+| **`ZABBIX_CHART_VERSION`** | `7.1.0` | Target Helm chart version (app version 7.4.15). |
+| **`ZABBIX_ADMIN_USER`** *(or `ZABBIX_USER`)* | `Admin` | Initial administrative username for the Web UI. |
+| **`ZABBIX_ADMIN_PASSWORD`** *(or `ZABBIX_PASS`)* | `zabbix` | Initial administrative password for the Web UI. |
+| **`ZABBIX_DB_PASSWORD`** *(or `ZABBIX_DB_PASS`)* | `Zabbix12345` | PostgreSQL database password for the `zabbix` database user. |
+
+---
+
+### Step-by-Step Script Execution Flow
+
+When executed, `install-zabbix.sh` carries out the following operational steps:
+
+1. **Step 0: Helm Chart Resolution**: Probes `airgap/charts/zabbix-7.1.0.tgz`. If present, installs 100% offline. If missing, adds and updates the `zabbix-community` repository.
+2. **Step 1: Helm Deployment**: Executes `helm upgrade --install` applying `zabbix-values.yaml` and sets the database password with a 10-minute rollout timeout.
+3. **Step 2: Gateway API HTTPRoute Application**: Applies `zabbix-httproute.yaml`. If `MAIN_DOMAIN` is overridden, it dynamically rewrites the hostname via `sed` before applying with `--server-side --force-conflicts`.
+4. **Step 3: Workload Rollout Readiness**: Monitors rollouts using `kubectl rollout status` for:
+   * Deployments: `zabbix-zabbix-server`, `zabbix-zabbix-server-standby`, `zabbix-zabbix-web`
+   * StatefulSets: `zabbix-postgresql`, `zabbix-zabbix-proxy`
+   * DaemonSet: `zabbix-zabbix-agent`
+5. **Step 3b: Automated Database Bootstrapping**: Connects to `zabbix-postgresql-0` and executes idempotent SQL queries to:
+   * Update the primary host interface to use DNS `zabbix-zabbix-agent` instead of static IP `127.0.0.1`.
+   * Register proxy name `zbx-proxy` in the `proxy` table.
+   * Mark `proxy_rtdata` with `state: 2` (Online) and `version: 70415` so the Web UI displays green status immediately.
+6. **Step 4: Summary & Route Display**: Prints active HTTPRoutes, running pods, URLs, credentials, and required `/etc/hosts` mappings.
+
+---
+
+## 🌐 Local DNS Setup
 Ensure local host resolution is added to your hosts file:
 * **Windows (PowerShell as Admin)**:
   ```powershell
