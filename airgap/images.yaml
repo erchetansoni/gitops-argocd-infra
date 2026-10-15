@@ -161,5 +161,3 @@ images:
   - component: zabbix-agent2
     description: "Zabbix Agent 2 monitoring daemon for Kubernetes nodes"
     image: docker.io/zabbix/zabbix-agent2:alpine-7.4.15
-
-
