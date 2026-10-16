@@ -15,24 +15,28 @@ Enterprise-grade distributed monitoring platform deployed natively on Kubernetes
                  ┌──────────────────────────────────┼──────────────────────────────────┐
                  │ (zabbix.chetan.local)            │ (zbx-srv.chetan.local)           │ (zbx-proxy.chetan.local)
                  ▼                                  ▼                                  ▼
-       ┌────────────────────┐             ┌────────────────────┐             ┌────────────────────┐
-       │   Zabbix Web UI    │             │   Zabbix Server    │             │    Zabbix Proxy    │
-       │  (Nginx Frontend)  │◄───────────►│ (7.4-latest pgsql) │◄────────────┤ (SQLite3 Active)   │
-       │                    │             │    [ACTIVE NODE]   │             │   (zbx-proxy)      │
-       └─────────┬──────────┘             └─────────┬──────────┘             └─────────┬──────────┘
-                 │                                  │                                  │ (Shared emptyDir)
-                 │                                  │                                  ▼
-                 │                        ┌─────────┴──────────┐             ┌────────────────────┐
-                 │                        │   Zabbix Server    │             │   SNMP Trapper     │
-                 │                        │ (7.4-latest pgsql) │             │ (zabbix-snmptraps) │
-                 │                        │   [STANDBY NODE]   │             │  UDP 162 / hostPort│
-                 │                        └─────────┬──────────┘             └────────────────────┘
-                 ▼                                  ▼                                  ▲
-       ┌───────────────────────────────────────────────────────┐                       │
-       │             TimescaleDB 2.17.2 (PG16)                 │             ┌─────────┴──────────┐
-       │   • High-performance time-series metric storage       │             │   Zabbix Agent 2   │
-       │   • Distributed HA cluster coordination (ha_node)     │◄────────────┤ (Node DaemonSet)   │
-       └───────────────────────────────────────────────────────┘             └────────────────────┘
+       ┌────────────────────┐             ┌────────────────────┐          ┌───────────────────────────────────┐
+       │   Zabbix Web UI    │             │   Zabbix Server    │          │    Proxy Group: IN-ZBX-PROXY      │
+       │  (Nginx Frontend)  │◄───────────►│ (7.4-latest pgsql) │◄─────────┤  (Active HA & Load Balancing)     │
+       │                    │             │    [ACTIVE NODE]   │   mTLS   │                                   │
+       └─────────┬──────────┘             └─────────┬──────────┘  TCP     │ ┌───────────────┐ ┌─────────────┐ │
+                 │                                  │             10051   │ │IN-ZBX-PROXY-0 │ │IN-ZBX-PROXY-1││
+                 │                                  │                     │ │(StatefulSet)  │ │(Deployment) │ │
+                 │                        ┌─────────┴──────────┐          │ └───────┬───────┘ └─────────────┘ │
+                 │                        │   Zabbix Server    │          └─────────┼─────────────────────────┘
+                 │                        │ (7.4-latest pgsql) │                    │ (Shared emptyDir)
+                 │                        │   [STANDBY NODE]   │                    ▼
+                 │                        └─────────┬──────────┘          ┌────────────────────┐
+                 │                                  │                     │   SNMP Trapper     │
+                 │                                  │                     │ (zabbix-snmptraps) │
+                 │                                  │                     │  UDP 162 / hostPort│
+                 ▼                                  ▼                     └────────────────────┘
+       ┌───────────────────────────────────────────────────────┐                    ▲
+       │             TimescaleDB 2.17.2 (PG16)                 │                    │
+       │   • High-performance time-series metric storage       │          ┌─────────┴──────────┐
+       │   • Distributed HA cluster coordination (ha_node)     │◄─────────┤   Zabbix Agent 2   │
+       │   • Proxy Group routing & dynamic host allocation     │          │ (Node DaemonSet)   │
+       └───────────────────────────────────────────────────────┘          └────────────────────┘
 ```
 
 ---
@@ -46,18 +50,19 @@ Enterprise-grade distributed monitoring platform deployed natively on Kubernetes
 * **Frontend Cluster Discovery**: The Web frontend automatically queries the database `ha_node` table and routes user requests directly to the active cluster node.
 
 ### 2. Decoupled SNMP Trapper via Zabbix Proxy (Approach C)
-* **Dedicated SNMP Trapper Sidecar**: The `zabbix-snmptraps` container is attached as a sidecar to the **Zabbix Proxy** (`zabbix-zabbix-proxy-0`) instead of the core server.
+* **Dedicated SNMP Trapper Sidecar**: The `zabbix-snmptraps` container is attached as a sidecar to the primary **Zabbix Proxy** (`IN-ZBX-PROXY-0` in `zabbix-zabbix-proxy-0`) instead of the core server.
 * **HostPort 162 Ingestion**: Binds to `hostPort: 162/UDP` and Service `zabbix-snmptraps` (`162/UDP -> 1162/UDP`), receiving traps from network devices via `zbx-snmp.chetan.local:162`.
 * **Zero Shared-Storage Bottleneck**: Traps are written to `/var/lib/zabbix/snmptraps/snmptraps.log` on a pod-local `emptyDir` volume, read by the proxy's `snmp trapper` daemon, and forwarded over standard encrypted TCP (port 10051) to the active Zabbix Server.
 * **No Server Scaling Conflicts**: Server pods remain completely lightweight and free from `hostPort: 162` port collisions.
 
-### 3. Active SQLite3 Zabbix Proxy (`zbx-proxy`)
-* **Embedded Database Engine**: Uses `zabbix/zabbix-proxy-sqlite3:alpine-7.4.15` with a persistent volume for buffer retention.
-* **Multi-Node Cluster Configuration**: Connected to the server cluster using semicolon delimiter syntax:
-  ```yaml
-  ZBX_SERVER_HOST: "zabbix-zabbix-server;zabbix-zabbix-server-standby"
-  ```
-* **Real-Time Runtime Health**: Tracks runtime state in PostgreSQL `proxy_rtdata`, continuously displaying **`Online`** (green badge) in the Web UI.
+### 3. Zabbix Proxy Groups: Multi-Proxy Regional HA & Load Balancing (Method 1)
+* **Proxy Group `IN-ZBX-PROXY`**: An enterprise group of active proxies deployed at the regional site (India), enabling high availability, automatic failover, and load distribution.
+* **Dual Active Proxies**:
+  * **`IN-ZBX-PROXY-0`**: Primary StatefulSet proxy pod (`zabbix-zabbix-proxy-0`) with persistent volume, SNMP trappers sidecar (`hostPort: 162/UDP`), and cert-manager mTLS.
+  * **`IN-ZBX-PROXY-1`**: Secondary Deployment proxy pod (`in-zbx-proxy-1`) providing hot standby and horizontal monitoring capacity with cert-manager mTLS.
+* **Native Server Proxy Group Manager**: The core Zabbix Server runs daemon process `proxy group manager #1`, continuously monitoring proxy heartbeats and automatically assigning hosts across online proxies.
+* **Rapid Automatic Failover**: Configured with `failover_delay: 10s` and `min_online: 1`. If an active proxy fails or restarts, the server automatically reallocates its monitored hosts to the remaining online proxy within 10 seconds without dropping metrics.
+* **Full cert-manager mTLS**: All proxies connect outbound to `zbx-srv.chetan.local:10051` using X.509 certificates signed by `ClusterIssuer/local-ca-issuer` (`tls_connect = 4, tls_accept = 4`).
 
 ### 4. TimescaleDB 2.17.2 & PostgreSQL 16
 * **Hypertable Partitioning & Compression**: Automatically compresses history and trend data, offering 10x-20x storage efficiency compared to standard relational tables.
@@ -76,7 +81,9 @@ Enterprise-grade distributed monitoring platform deployed natively on Kubernetes
 | **Web UI** | `https://zabbix.chetan.local` | `zabbix-zabbix-web` | `80` (HTTP) | Web Dashboard & JSON-RPC API |
 | **Server (Active)** | `zbx-srv.chetan.local` | `zabbix-zabbix-server` | `10051` (TCP) | Metric Trapper & Server Daemon |
 | **Server (Standby)**| `zabbix-zabbix-server-standby` | `zabbix-zabbix-server-standby` | `10051` (TCP) | Standby HA Server Node |
-| **Proxy** | `zbx-proxy.chetan.local` | `zabbix-zabbix-proxy` | `10051` (TCP) | Active SQLite3 Proxy Buffer |
+| **Proxy Group** | `IN-ZBX-PROXY` | N/A (Logical Group) | N/A | Regional Active Proxy Group (HA & LB) |
+| **Proxy 0** | `zbx-proxy.chetan.local` | `zabbix-zabbix-proxy` | `10051` (TCP) | Primary Proxy (`IN-ZBX-PROXY-0`) + SNMP Traps |
+| **Proxy 1** | `in-zbx-proxy-1.zabbix.svc` | `in-zbx-proxy-1` | `10051` (TCP) | Secondary Proxy (`IN-ZBX-PROXY-1`) |
 | **SNMP Trapper** | `zbx-snmp.chetan.local` | `zabbix-snmptraps` | `162` (UDP) | Net-SNMP Trap Receiver |
 
 ### Default Credentials
@@ -597,57 +604,106 @@ To ensure bank-grade security across untrusted networks and the public internet,
 
 ---
 
-## 🌍 Distributed Multi-Site Architecture: Onboarding Remote Regional Proxies
+## 🌍 Distributed Multi-Site Architecture: Regional Proxy Groups (Method 1)
 
-In global enterprise deployments, branches or data centers in **India, China, the US, and Europe** monitor hundreds of local PLCs, network switches, and servers. Instead of sending raw monitoring traffic over WAN or exposing internal OT/IT devices, deploy a **local Zabbix Proxy** at each remote site.
+In global enterprise deployments, organizations operate multiple remote branches and industrial facilities across the globe (e.g., **India, China, the US, and Europe**). Each site contains hundreds of OT/IT devices—such as industrial PLCs, network core/access switches, and Windows/Linux server racks.
+
+To deliver **high availability (HA)**, **failover resilience**, and **horizontal load balancing** at every site without exposing internal networks over WAN, Zabbix employs **Proxy Groups (Method 1)**:
+* Each regional site runs an autonomous **Proxy Group** (e.g., `IN-ZBX-PROXY`, `US-ZBX-PROXY`, `CN-ZBX-PROXY`).
+* Each Proxy Group contains **multiple redundant proxy nodes** (e.g., `IN-ZBX-PROXY-0`, `IN-ZBX-PROXY-1`).
+* All proxy nodes communicate outbound over secure **cert-manager mTLS (`TCP 10051`)** with the central server cluster (**`HQ-ZBX-SERVER`** / `zbx-srv.chetan.local`).
+* The central server dynamically balances monitored hosts across healthy online proxies and automatically reallocates hosts within **10 seconds** if any proxy node restarts or experiences a hardware fault.
+
+---
+
+### 🌐 Global Multi-Site Proxy Group Topology
 
 ```
-       ┌────────────────────────────────────────────────────────────────────────┐
-       │                 CENTRAL CLOUD / HQ KUBERNETES CLUSTER                  │
-       │                                                                        │
-       │   Zabbix HA Server Cluster (Active / Standby)                          │
-       │   Ingress / Gateway: zbx-srv.chetan.local:10051 (TCP)                  │
-       │   cert-manager: ClusterIssuer (Root CA)                                │
-       └──────────────▲──────────────────────────▲──────────────────────────▲───┘
-                      │                          │                          │
-           mTLS (TCP 10051)           mTLS (TCP 10051)           mTLS (TCP 10051)
-           Client Certificate         Client Certificate         Client Certificate
-                      │                          │                          │
-        ┌─────────────┴──────────┐ ┌─────────────┴──────────┐ ┌─────────────┴──────────┐
-        │   INDIA SITE (Mumbai)  │ │   CHINA SITE (Shanghai)│ │     US SITE (Dallas)   │
-        │ ┌────────────────────┐ │ │ ┌────────────────────┐ │ │ ┌────────────────────┐ │
-        │ │ Zabbix Proxy       │ │ │ │ Zabbix Proxy       │ │ │ │ Zabbix Proxy       │ │
-        │ │ (zbx-proxy-in)     │ │ │ │ (zbx-proxy-cn)     │ │ │ │ (zbx-proxy-us)     │ │
-        │ └─────────┬──────────┘ │ │ └─────────┬──────────┘ │ │ └─────────┬──────────┘ │
-        │           │ LAN        │ │           │ LAN        │ │           │ LAN        │
-        │     ┌─────┴─────┐      │ │     ┌─────┴─────┐      │ │     ┌─────┴─────┐      │
-        │     ▼           ▼      │ │     ▼           ▼      │ │     ▼           ▼      │
-        │  Switches     PLCs     │ │  Switches     PLCs     │ │  Switches     PLCs     │
-        └────────────────────────┘ └────────────────────────┘ └────────────────────────┘
+       ┌────────────────────────────────────────────────────────────────────────────────────────┐
+       │                       CENTRAL CLOUD / HQ KUBERNETES CLUSTER                             │
+       │                                                                                        │
+       │   Central Zabbix HA Server Cluster: HQ-ZBX-SERVER (Active / Standby)                   │
+       │   Central Traefik Gateway: zbx-srv.chetan.local:10051 (TCP)                            │
+       │   cert-manager: ClusterIssuer (local-ca-issuer)                                        │
+       │   Daemon: proxy group manager #1 (Automated Host Balancing & Failover)                 │
+       └──────────────────▲────────────────────────▲────────────────────────▲───────────────────┘
+                          │                        │                        │
+               mTLS (TCP 10051)         mTLS (TCP 10051)         mTLS (TCP 10051)
+               Client Certificate       Client Certificate       Client Certificate
+                          │                        │                        │
+       ┌──────────────────┴─────────────┐ ┌────────┴──────────────────┐ ┌───┴───────────────────────┐
+       │      INDIA SITE (Mumbai)       │ │     CHINA SITE (Shanghai)  │ │      US SITE (Dallas)     │
+       │  ┌──────────────────────────┐  │ │  ┌──────────────────────┐  │ │  ┌──────────────────────┐ │
+       │  │ Proxy Group: IN-ZBX-PROXY│  │ │  │Proxy Group:CN-ZBX-PROXY│ │ │  │Proxy Group:US-ZBX-PROXY│ │
+       │  │ (Failover: 10s, Min: 1)  │  │ │  │(Failover: 10s, Min: 1) │ │ │  │(Failover: 10s, Min: 1) │ │
+       │  │ ┌────────────┐┌───────────┐│ │ │ ┌──────────┐┌──────────┐│ │ │ ┌──────────┐┌──────────┐│ │
+       │  │ │IN-ZBX-     ││IN-ZBX-    ││ │ │ │CN-ZBX-   ││CN-ZBX-   ││ │ │ │US-ZBX-   ││US-ZBX-   ││ │
+       │  │ │PROXY-0     ││PROXY-1    ││ │ │ │PROXY-0   ││PROXY-1   ││ │ │ │PROXY-0   ││PROXY-1   ││ │
+       │  │ └─────┬──────┘└─────┬─────┘│ │ │ └────┬─────┘└────┬─────┘│ │ │ └────┬─────┘└────┬─────┘│ │
+       │  └───────┼─────────────┼──────┘  │ └──────┼──────────┼───────┘  │ └──────┼──────────┼───────┘  │
+       │          │  Local LAN  │         │        │Local LAN │          │        │Local LAN │          │
+       │     ┌────┴─────────────┴───┐     │   ┌────┴──────────┴────┐     │   ┌────┴──────────┴────┐     │
+       │     ▼                      ▼     │   ▼                    ▼     │   ▼                    ▼     │
+       │  Switches                PLCs    │Switches              PLCs    │Switches              PLCs    │
+       │  (Cisco/Aruba)       (Siemens S7)│(Huawei)          (Schneider) │(Juniper/Arista)   (Rockwell) │
+       └──────────────────────────────────┘ └────────────────────────────┘ └──────────────────────────┘
 ```
 
 ---
 
-### Step-by-Step Guide: Onboarding a Regional Remote Proxy (e.g., India Site)
+### ⚙️ How Zabbix Proxy Groups Work (Method 1)
 
-#### Step 1: Issue an X.509 Certificate for the Remote Proxy
-Create a Certificate manifest pointing to your Central CA (`local-ca-issuer`):
+1. **Autonomous Cluster daemons (`proxy group manager #1`)**:
+   * The active Zabbix Server daemon runs an internal thread: `server #52 started [proxy group manager #1]`.
+   * This manager monitors the database tables `proxy_group`, `proxy`, and `proxy_group_rtdata`.
+2. **Proxy Heartbeats & Status Transitions**:
+   * Each active proxy (`IN-ZBX-PROXY-0`, `IN-ZBX-PROXY-1`) dials `zbx-srv.chetan.local:10051` via cert-manager mTLS every few seconds.
+   * When both proxies are healthy, the server marks the Proxy Group as **`Online`** (green badge).
+   * If a proxy disconnects, the group transitions to **`Degrading`** or **`Offline`** based on `min_online`.
+3. **Dynamic Host Balancing**:
+   * Monitored targets (e.g., `IN-LAP-CHETAN`, Siemens PLCs, Cisco switches) are configured with:
+     ```sql
+     monitored_by = 2 (Proxy Group)
+     proxy_groupid = 1 (IN-ZBX-PROXY)
+     ```
+   * The `proxy group manager` dynamically assigns hosts across available online proxies in the group and updates the internal routing table `host_proxy`.
+4. **Sub-10s Zero-Loss Automated Failover**:
+   * If `IN-ZBX-PROXY-0` experiences a hardware crash or node restart, the `proxy group manager` detects the missed heartbeat within `failover_delay` (`10s`) and automatically shifts all assigned hosts to `IN-ZBX-PROXY-1`.
+   * When `IN-ZBX-PROXY-0` recovers, the server rebalances the hosts across both proxies.
+
+---
+
+### 🚀 Step-by-Step Guide: Deploying a Multi-Proxy Regional Group
+
+#### Step 1: Issue cert-manager X.509 Certificate with All Proxy SANs
+All proxies in the group share or receive individual X.509 certificates signed by the local CA (`local-ca-issuer`):
 
 ```yaml
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: zabbix-proxy-in-tls
+  name: zabbix-proxy-tls
   namespace: zabbix
 spec:
-  secretName: zabbix-proxy-in-tls-secret
+  secretName: zabbix-proxy-tls-secret
   issuerRef:
     name: local-ca-issuer
     kind: ClusterIssuer
-  commonName: "zbx-proxy-in"
+  commonName: "IN-ZBX-PROXY"
   dnsNames:
-    - "zbx-proxy-in"
-    - "zbx-proxy-in.chetan.local"
+    - "IN-ZBX-PROXY"
+    - "IN-ZBX-PROXY-0"
+    - "IN-ZBX-PROXY-1"
+    - "in-zbx-proxy-1"
+    - "in-zbx-proxy-1.zabbix.svc"
+    - "in-zbx-proxy-1.zabbix.svc.cluster.local"
+    - "zbx-proxy"
+    - "zbx-proxy.chetan.local"
+    - "zabbix-zabbix-proxy"
+    - "zabbix-zabbix-proxy.zabbix.svc"
+    - "localhost"
+  ipAddresses:
+    - "127.0.0.1"
   duration: 8760h   # 1 year
   renewBefore: 720h # 30 days
   privateKey:
@@ -655,75 +711,158 @@ spec:
     size: 2048
 ```
 
-Export the generated certificate and CA to the remote site:
+---
+
+#### Step 2: Deploy Dual Proxies at the Regional Site
+
+##### Proxy 0 (`IN-ZBX-PROXY-0` - Primary StatefulSet)
+Configured via `zabbix-values.yaml`:
+```yaml
+zabbixProxy:
+  enabled: true
+  ZBX_PROXYMODE: 0 # Active
+  ZBX_HOSTNAME: "IN-ZBX-PROXY-0"
+  ZBX_SERVER_HOST: "zabbix-zabbix-server;zabbix-zabbix-server-standby"
+  extraEnv:
+    - name: ZBX_TLSCONNECT
+      value: "cert"
+    - name: ZBX_TLSACCEPT
+      value: "cert,unencrypted"
+    - name: ZBX_TLSCAFILE
+      value: "/etc/zabbix/tls/ca.crt"
+    - name: ZBX_TLSCERTFILE
+      value: "/etc/zabbix/tls/tls.crt"
+    - name: ZBX_TLSKEYFILE
+      value: "/etc/zabbix/tls/tls.key"
+```
+
+##### Proxy 1 (`IN-ZBX-PROXY-1` - Secondary Deployment)
+Configured in `extraManifests`:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: in-zbx-proxy-1
+  namespace: zabbix
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: zabbix
+      app.kubernetes.io/component: proxy-1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: proxy-1
+    spec:
+      serviceAccountName: zabbix
+      containers:
+        - name: zabbix-proxy
+          image: zabbix/zabbix-proxy-sqlite3:alpine-7.4.15
+          env:
+            - name: ZBX_PROXYMODE
+              value: "0"
+            - name: ZBX_HOSTNAME
+              value: "IN-ZBX-PROXY-1"
+            - name: ZBX_SERVER_HOST
+              value: "zabbix-zabbix-server;zabbix-zabbix-server-standby"
+            - name: ZBX_SERVER_PORT
+              value: "10051"
+            - name: ZBX_TLSCONNECT
+              value: "cert"
+            - name: ZBX_TLSACCEPT
+              value: "cert,unencrypted"
+            - name: ZBX_TLSCAFILE
+              value: "/etc/zabbix/tls/ca.crt"
+            - name: ZBX_TLSCERTFILE
+              value: "/etc/zabbix/tls/tls.crt"
+            - name: ZBX_TLSKEYFILE
+              value: "/etc/zabbix/tls/tls.key"
+          volumeMounts:
+            - name: zabbix-proxy-tls
+              mountPath: /etc/zabbix/tls
+              readOnly: true
+      volumes:
+        - name: zabbix-proxy-tls
+          secret:
+            secretName: zabbix-proxy-tls-secret
+            defaultMode: 0444
+```
+
+---
+
+#### Step 3: Register Proxy Group and Proxies in Database
+
+Execute the bootstrap queries in `zabbix-postgresql-0`:
+```sql
+-- 1. Create Proxy Group
+INSERT INTO proxy_group (proxy_groupid, name, description, failover_delay, min_online)
+VALUES (1, 'IN-ZBX-PROXY', 'India Regional Proxy Group (Active HA)', '10s', '1')
+ON CONFLICT (proxy_groupid) DO UPDATE SET name = 'IN-ZBX-PROXY', failover_delay = '10s', min_online = '1';
+
+INSERT INTO proxy_group_rtdata (proxy_groupid, state)
+VALUES (1, 1)
+ON CONFLICT (proxy_groupid) DO UPDATE SET state = 1;
+
+-- 2. Register Proxies under Proxy Group 1 with Certificate Encryption
+INSERT INTO proxy (proxyid, name, operating_mode, tls_connect, tls_accept, proxy_groupid, local_address, local_port, address, port)
+VALUES (1, 'IN-ZBX-PROXY-0', 0, 4, 4, 1, 'zabbix-zabbix-proxy', '10051', 'zabbix-zabbix-proxy', '10051')
+ON CONFLICT (name) DO UPDATE SET tls_connect = 4, tls_accept = 4, proxy_groupid = 1, local_address = 'zabbix-zabbix-proxy', local_port = '10051';
+
+INSERT INTO proxy (proxyid, name, operating_mode, tls_connect, tls_accept, proxy_groupid, local_address, local_port, address, port)
+VALUES (2, 'IN-ZBX-PROXY-1', 0, 4, 4, 1, 'in-zbx-proxy-1', '10051', 'in-zbx-proxy-1', '10051')
+ON CONFLICT (name) DO UPDATE SET tls_connect = 4, tls_accept = 4, proxy_groupid = 1, local_address = 'in-zbx-proxy-1', local_port = '10051';
+
+-- 3. Assign Host to Proxy Group
+UPDATE hosts SET monitored_by = 2, proxy_groupid = 1, proxyid = NULL WHERE host = 'IN-LAP-CHETAN';
+```
+
+Reload server configuration cache:
 ```bash
-# Extract CA certificate, Proxy certificate, and Proxy private key
-kubectl get secret zabbix-proxy-in-tls-secret -n zabbix -o jsonpath='{.data.ca\.crt}' | base64 -d > /etc/zabbix/tls/ca.crt
-kubectl get secret zabbix-proxy-in-tls-secret -n zabbix -o jsonpath='{.data.tls\.crt}' | base64 -d > /etc/zabbix/tls/zbx_proxy_in.crt
-kubectl get secret zabbix-proxy-in-tls-secret -n zabbix -o jsonpath='{.data.tls\.key}' | base64 -d > /etc/zabbix/tls/zbx_proxy_in.key
-
-# Set secure permissions
-chmod 644 /etc/zabbix/tls/ca.crt /etc/zabbix/tls/zbx_proxy_in.crt
-chmod 600 /etc/zabbix/tls/zbx_proxy_in.key
-chown -R zabbix:zabbix /etc/zabbix/tls/
+kubectl exec -n zabbix zabbix-zabbix-server-7668885d6c-nddl5 -c zabbix-server -- zabbix_server -R config_cache_reload
 ```
 
 ---
 
-#### Step 2: Configure `zabbix_proxy.conf` at Remote Site
-On the regional proxy server (Docker, Linux VM, or lightweight edge device):
+### 📸 Live End-to-End Verification Proof
 
-```ini
-# Proxy Identification
-Hostname=zbx-proxy-in
-ProxyMode=0                                # Active proxy (initiates outbound connection)
+#### 1. Administration > Proxy Groups (`https://zabbix.chetan.local/zabbix.php?action=proxygroup.list`)
+Proxy Group **`IN-ZBX-PROXY`** shows state **`Online`** (green), failover delay `10s`, and `2` active online proxies:
 
-# Central Server Endpoint
-Server=zbx-srv.chetan.local                # Central Server FQDN or Public IP
-ServerPort=10051
+![Zabbix Proxy Groups Online](images/zabbix_proxy_groups_online.png)
 
-# Local SQLite3 Buffer Database
-DBName=/var/lib/zabbix/zabbix_proxy.db
+---
 
-# ------------------------------------------------------------------------------
-# mTLS Certificate Encryption
-# ------------------------------------------------------------------------------
-TLSConnect=cert
-TLSAccept=cert
-TLSCAFile=/etc/zabbix/tls/ca.crt
-TLSCertFile=/etc/zabbix/tls/zbx_proxy_in.crt
-TLSKeyFile=/etc/zabbix/tls/zbx_proxy_in.key
+#### 2. Administration > Proxies (`https://zabbix.chetan.local/zabbix.php?action=proxy.list`)
+Both **`IN-ZBX-PROXY-0`** and **`IN-ZBX-PROXY-1`** are registered under `IN-ZBX-PROXY`, showing state **`Online`** (green badge) with **`CERT`** encryption badges:
 
-# Optional Strict Identity Validation
-TLSServerCertSubject=CN=zbx-srv.chetan.local
-```
+![Zabbix Proxies List Online](images/zabbix_proxies_list_online.png)
 
-Restart the remote proxy service:
+---
+
+#### 3. Data Collection > Hosts (`https://zabbix.chetan.local/zabbix.php?action=host.list`)
+Host **`IN-LAP-CHETAN`** is monitored by Proxy Group **`IN-ZBX-PROXY`**, with dynamic active routing handled by `IN-ZBX-PROXY-0`:
+
+![Zabbix Host Monitored by Proxy Group](images/zabbix_host_proxy_group.png)
+
+---
+
+### 🔍 Verification Commands
+
 ```bash
-sudo systemctl restart zabbix-proxy
+# Verify Proxy Group state in Database
+kubectl exec -n zabbix zabbix-postgresql-0 -- psql -U zabbix -d zabbix -c \
+  "SELECT pg.proxy_groupid, pg.name, rt.state AS group_state FROM proxy_group pg JOIN proxy_group_rtdata rt ON pg.proxy_groupid = rt.proxy_groupid;"
+
+# Verify Individual Proxies in Group with mTLS flags
+kubectl exec -n zabbix zabbix-postgresql-0 -- psql -U zabbix -d zabbix -c \
+  "SELECT p.proxyid, p.name, p.local_address, p.tls_connect, p.tls_accept, pr.state AS proxy_state FROM proxy p LEFT JOIN proxy_rtdata pr ON p.proxyid = pr.proxyid;"
+
+# Verify Host Proxy Group Assignment & Dynamic Route
+kubectl exec -n zabbix zabbix-postgresql-0 -- psql -U zabbix -d zabbix -c \
+  "SELECT h.host, h.monitored_by, h.proxy_groupid, hp.proxyid, p.name AS assigned_proxy FROM hosts h LEFT JOIN host_proxy hp ON h.hostid = hp.hostid LEFT JOIN proxy p ON hp.proxyid = p.proxyid WHERE h.host = 'IN-LAP-CHETAN';"
 ```
+*(Monitored By: `2` = Proxy Group, Group State: `3` = Online, Proxy State: `2` = Online, TLS Connect/Accept: `4` = Certificate)*
 
----
-
-#### Step 3: Register Remote Proxy in Central Zabbix Web UI
-1. Log in to the Central Zabbix Web UI (`https://zabbix.chetan.local`).
-2. Go to **Administration > Proxies** -> click **Create proxy**.
-3. **Proxy Tab**:
-   * **Proxy name**: `zbx-proxy-in` (must match `Hostname` in `zabbix_proxy.conf` exactly).
-   * **Proxy mode**: `Active`.
-4. **Encryption Tab**:
-   * **Connections to proxy**: `Certificate`.
-   * **Connections from proxy**: Check **`Certificate`** (uncheck `No encryption`).
-   * **Issuer**: (Optional) match CA Common Name.
-   * **Subject**: `CN=zbx-proxy-in`.
-5. Click **Add**.
-
-Within 10-15 seconds, the new regional proxy performs an encrypted TLS handshake with the Central Server and transitions to **`Online`** (green badge).
-
----
-
-#### Step 4: Assign Remote Site Devices to Regional Proxy
-When adding devices at the India site (switches, PLCs, servers):
-* In **Data collection > Hosts**, set **Monitored by proxy**: **`zbx-proxy-in`**.
-* The proxy polls local devices over the internal LAN (SNMP, Modbus TCP, Agent 2) and forwards all telemetry securely to the central cloud over mTLS, with local buffering during internet outages.
 
