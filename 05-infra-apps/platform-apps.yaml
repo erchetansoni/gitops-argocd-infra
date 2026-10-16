@@ -774,58 +774,58 @@ items:
                           secret:
                             secretName: zabbix-server-tls-secret
                             defaultMode: 0444
-                - apiVersion: cert-manager.io/v1
-                  kind: Certificate
-                  metadata:
-                    name: zabbix-server-tls
-                    namespace: zabbix
-                  spec:
-                    secretName: zabbix-server-tls-secret
-                    issuerRef:
-                      name: local-ca-issuer
-                      kind: ClusterIssuer
-                    commonName: "zbx-srv.chetan.local"
-                    dnsNames:
-                      - "zbx-srv.chetan.local"
-                      - "zabbix-zabbix-server"
-                      - "zabbix-zabbix-server-standby"
-                      - "zabbix-zabbix-server.zabbix.svc.cluster.local"
-                      - "zabbix-zabbix-server-standby.zabbix.svc.cluster.local"
-                      - "zabbix-zabbix-server.zabbix.svc"
-                      - "zabbix-zabbix-server-standby.zabbix.svc"
-                      - "localhost"
-                    ipAddresses:
-                      - "127.0.0.1"
-                    duration: 8760h
-                    renewBefore: 720h
-                    privateKey:
-                      algorithm: RSA
-                      size: 2048
-                - apiVersion: cert-manager.io/v1
-                  kind: Certificate
-                  metadata:
-                    name: zabbix-proxy-tls
-                    namespace: zabbix
-                  spec:
-                    secretName: zabbix-proxy-tls-secret
-                    issuerRef:
-                      name: local-ca-issuer
-                      kind: ClusterIssuer
-                    commonName: "zbx-proxy"
-                    dnsNames:
-                      - "zbx-proxy"
-                      - "zbx-proxy.chetan.local"
-                      - "zabbix-zabbix-proxy"
-                      - "zabbix-zabbix-proxy.zabbix.svc.cluster.local"
-                      - "zabbix-zabbix-proxy.zabbix.svc"
-                      - "localhost"
-                    ipAddresses:
-                      - "127.0.0.1"
-                    duration: 8760h
-                    renewBefore: 720h
-                    privateKey:
-                      algorithm: RSA
-                      size: 2048
+              - apiVersion: cert-manager.io/v1
+                kind: Certificate
+                metadata:
+                  name: zabbix-server-tls
+                  namespace: zabbix
+                spec:
+                  secretName: zabbix-server-tls-secret
+                  issuerRef:
+                    name: local-ca-issuer
+                    kind: ClusterIssuer
+                  commonName: "zbx-srv.chetan.local"
+                  dnsNames:
+                    - "zbx-srv.chetan.local"
+                    - "zabbix-zabbix-server"
+                    - "zabbix-zabbix-server-standby"
+                    - "zabbix-zabbix-server.zabbix.svc.cluster.local"
+                    - "zabbix-zabbix-server-standby.zabbix.svc.cluster.local"
+                    - "zabbix-zabbix-server.zabbix.svc"
+                    - "zabbix-zabbix-server-standby.zabbix.svc"
+                    - "localhost"
+                  ipAddresses:
+                    - "127.0.0.1"
+                  duration: 8760h
+                  renewBefore: 720h
+                  privateKey:
+                    algorithm: RSA
+                    size: 2048
+              - apiVersion: cert-manager.io/v1
+                kind: Certificate
+                metadata:
+                  name: zabbix-proxy-tls
+                  namespace: zabbix
+                spec:
+                  secretName: zabbix-proxy-tls-secret
+                  issuerRef:
+                    name: local-ca-issuer
+                    kind: ClusterIssuer
+                  commonName: "zbx-proxy"
+                  dnsNames:
+                    - "zbx-proxy"
+                    - "zbx-proxy.chetan.local"
+                    - "zabbix-zabbix-proxy"
+                    - "zabbix-zabbix-proxy.zabbix.svc.cluster.local"
+                    - "zabbix-zabbix-proxy.zabbix.svc"
+                    - "localhost"
+                  ipAddresses:
+                    - "127.0.0.1"
+                  duration: 8760h
+                  renewBefore: 720h
+                  privateKey:
+                    algorithm: RSA
+                    size: 2048
       destination:
         server: https://kubernetes.default.svc
         namespace: zabbix
