@@ -28,6 +28,7 @@ HELM_CHART="${ZABBIX_HELM_CHART:-zabbix-community/zabbix}"
 CHART_VERSION="${ZABBIX_CHART_VERSION:-7.1.0}"
 VALUES_FILE="${SCRIPT_DIR}/zabbix-values.yaml"
 HTTPROUTE_FILE="${SCRIPT_DIR}/zabbix-httproute.yaml"
+CERT_FILE="${SCRIPT_DIR}/zabbix-certificates.yaml"
 
 ZABBIX_USER="${ZABBIX_ADMIN_USER:-Admin}"
 ZABBIX_PASS="${ZABBIX_ADMIN_PASSWORD:-zabbix}"
@@ -76,6 +77,14 @@ else
   helm repo update zabbix-community
   CHART_SOURCE="${HELM_CHART}"
   VERSION_FLAG=(--version "${CHART_VERSION}")
+fi
+
+# Step 0b: Pre-create Namespace & Apply TLS Certificates via cert-manager
+kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+if [[ -f "${CERT_FILE}" ]]; then
+  echo "🔒 Applying Zabbix TLS certificates (cert-manager)..."
+  CERT_FILE_NATIVE="$(to_native_path "${CERT_FILE}")"
+  kubectl apply -n "${NAMESPACE}" --server-side --force-conflicts -f "${CERT_FILE_NATIVE}"
 fi
 
 # Step 1: Install or Upgrade Zabbix Helm Release
@@ -133,7 +142,7 @@ for i in {1..30}; do
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
       "UPDATE interface SET useip = 0, dns = '${RELEASE_NAME}-zabbix-agent' WHERE interfaceid = 1;" >/dev/null 2>&1 || true
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
-      "INSERT INTO proxy (proxyid, name, operating_mode) VALUES (1, 'zbx-proxy', 0) ON CONFLICT (name) DO NOTHING;" >/dev/null 2>&1 || true
+      "INSERT INTO proxy (proxyid, name, operating_mode, tls_connect, tls_accept) VALUES (1, 'zbx-proxy', 0, 2, 2) ON CONFLICT (name) DO UPDATE SET tls_connect = 2, tls_accept = 2;" >/dev/null 2>&1 || true
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
       "INSERT INTO proxy_rtdata (proxyid, state, version, compatibility) VALUES (1, 2, 70415, 1) ON CONFLICT (proxyid) DO UPDATE SET state = 2, version = 70415, compatibility = 1;" >/dev/null 2>&1 || true
     echo "✅ Zabbix active proxy 'zbx-proxy' registered and server agent interface configured."

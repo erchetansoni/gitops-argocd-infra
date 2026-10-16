@@ -94,7 +94,8 @@ Enterprise-grade distributed monitoring platform deployed natively on Kubernetes
 ```
 05-infra-apps/06-zabbix/
 ├── install-zabbix.sh           # Automated installer script (Helm, HTTPRoute, DB bootstrap)
-├── zabbix-values.yaml          # Helm values (HA nodes, TimescaleDB, Proxy SNMP sidecar)
+├── zabbix-values.yaml          # Helm values (HA nodes, TimescaleDB, Proxy SNMP sidecar, mTLS)
+├── zabbix-certificates.yaml    # cert-manager X.509 Certificates (mTLS for Server & Proxies)
 ├── zabbix-httproute.yaml       # Gateway API HTTPRoute connecting zabbix.chetan.local
 ├── zabbix-application.yaml     # Standalone Argo CD Application manifest for GitOps
 └── README.md                   # Comprehensive architecture, operational guide & verification
@@ -132,6 +133,13 @@ Enterprise-grade distributed monitoring platform deployed natively on Kubernetes
    * **Purpose**: Declarative Argo CD `Application` Custom Resource manifest for GitOps management.
    * **Tracking**: Points directly to Helm repository `https://zabbix-community.github.io/helm-zabbix` chart `zabbix` version `7.1.0` with full in-line `valuesObject`.
    * **Sync Policies**: Configured with `automated` sync, `prune: false`, `selfHeal: true`, and sync-wave `2` for seamless platform orchestration.
+
+5. **[`zabbix-certificates.yaml`](zabbix-certificates.yaml)**:
+   * **Purpose**: cert-manager Custom Resources (`Certificate`) generating X.509 TLS keypairs for Zabbix Server and Proxies from `ClusterIssuer/local-ca-issuer`.
+   * **Key Specifications**:
+     * `Certificate/zabbix-server-tls`: Issues secret `zabbix-server-tls-secret` for server SANs (`zbx-srv.chetan.local`, `zabbix-zabbix-server`, `zabbix-zabbix-server-standby`).
+     * `Certificate/zabbix-proxy-tls`: Issues secret `zabbix-proxy-tls-secret` for proxy SANs (`zbx-proxy`, `zbx-proxy.chetan.local`, `zabbix-zabbix-proxy`).
+     * Auto-renewal 30 days prior to 1-year expiry.
 
 ---
 
@@ -518,3 +526,203 @@ SNMP Traps (:162 UDP)   ──┘       (Sidecar Trapper)
    * UDP packets cannot be routed reliably over high-latency WAN connections. The proxy receives traps locally and forwards them over encrypted TCP.
 3. **Buffer During Maintenance & Failovers**:
    * If Kubernetes nodes restart or the Zabbix Server fails over between HA nodes, `zbx-proxy` caches telemetry in its local SQLite3 database and streams all buffered data once the connection resumes, guaranteeing **zero data loss**.
+
+---
+
+## 🔒 End-to-End mTLS Certificate Encryption (cert-manager & X.509)
+
+To ensure bank-grade security across untrusted networks and the public internet, the connection between **Zabbix Server** and **Zabbix Proxies** is encrypted and mutually authenticated using **X.509 digital certificates** issued automatically by **cert-manager**.
+
+### 1. Why Certificate Encryption (mTLS) instead of PSK?
+
+| Feature | X.509 Certificate Encryption (mTLS) *(Implemented)* | Pre-Shared Key (PSK) |
+| :--- | :--- | :--- |
+| **Authentication Type** | Mutual asymmetric public-key cryptography (RSA 2048-bit) | Symmetric shared secret password |
+| **Automation & Lifecycle** | **Automated** by Kubernetes `cert-manager` (rotation, renewal) | Manual distribution, manual text-file maintenance |
+| **Multi-Site Scalability** | **High**: Each regional proxy (India, China, US) receives its own unique certificate signed by the central CA | Low: Sharing the same PSK across all sites compromises all if one is leaked |
+| **Subject/Issuer Verification** | **Yes**: Server validates exact Certificate Subject and CA Issuer | None: Authenticates only by shared string match |
+| **Revocation & Zero Trust** | Supported via CRL / CA trust boundary | Requires manually updating all servers & proxies |
+
+---
+
+### 2. Kubernetes cert-manager Architecture
+
+```
+                       ┌───────────────────────────────────┐
+                       │   cert-manager (local-ca-issuer)  │
+                       │    Internal Root Certificate CA   │
+                       └─────────────────┬─────────────────┘
+                                         │
+                 ┌───────────────────────┴───────────────────────┐
+                 │ Issues Server Cert                            │ Issues Proxy Cert
+                 ▼                                               ▼
+       ┌────────────────────────┐                     ┌────────────────────────┐
+       │   Secret:              │                     │   Secret:              │
+       │   zabbix-server-tls    │                     │   zabbix-proxy-tls     │
+       │   - ca.crt             │                     │   - ca.crt             │
+       │   - tls.crt            │                     │   - tls.crt            │
+       │   - tls.key            │                     │   - tls.key            │
+       └───────────┬────────────┘                     └───────────┬────────────┘
+                   │ Mounts: /etc/zabbix/tls                      │ Mounts: /etc/zabbix/tls
+                   ▼                                              ▼
+       ┌────────────────────────┐    mTLS (Encrypted TCP)     ┌────────────────────────┐
+       │      Zabbix Server     │◄═══════════════════════════►│      Zabbix Proxy      │
+       │ (Active & Standby HA)  │       Port 10051            │   (zbx-proxy, regional)│
+       └────────────────────────┘                             └────────────────────────┘
+```
+
+1. **Root CA (`ClusterIssuer/local-ca-issuer`)**:
+   Issues cryptographic certificates within the Kubernetes cluster.
+2. **Server TLS Secret (`zabbix-server-tls-secret`)**:
+   Mounted into both the Active (`zabbix-zabbix-server`) and Standby (`zabbix-zabbix-server-standby`) pods at `/etc/zabbix/tls`.
+   Configured with:
+   * `ZBX_TLSCAFILE: "/etc/zabbix/tls/ca.crt"`
+   * `ZBX_TLSCERTFILE: "/etc/zabbix/tls/tls.crt"`
+   * `ZBX_TLSKEYFILE: "/etc/zabbix/tls/tls.key"`
+3. **Proxy TLS Secret (`zabbix-proxy-tls-secret`)**:
+   Mounted into `zabbix-zabbix-proxy` at `/etc/zabbix/tls`.
+   Configured with:
+   * `ZBX_TLSCONNECT: "cert"` (strictly connects using TLS Certificate)
+   * `ZBX_TLSACCEPT: "cert,unencrypted"` (accepts cert connections)
+   * `ZBX_TLSCAFILE: "/etc/zabbix/tls/ca.crt"`
+   * `ZBX_TLSCERTFILE: "/etc/zabbix/tls/tls.crt"`
+   * `ZBX_TLSKEYFILE: "/etc/zabbix/tls/tls.key"`
+4. **Database-Level Strict Enforcement**:
+   In PostgreSQL `proxy` table:
+   * `tls_connect = 2` (`ZBX_TCP_SEC_TLS_CERT`)
+   * `tls_accept = 2` (`ZBX_TCP_SEC_TLS_CERT`)
+   * If any unencrypted client tries to impersonate the proxy, the server terminates the socket immediately:
+     `cannot accept connection from proxy "zbx-proxy": connection of type "unencrypted" is not allowed for proxy "zbx-proxy"`.
+
+---
+
+## 🌍 Distributed Multi-Site Architecture: Onboarding Remote Regional Proxies
+
+In global enterprise deployments, branches or data centers in **India, China, the US, and Europe** monitor hundreds of local PLCs, network switches, and servers. Instead of sending raw monitoring traffic over WAN or exposing internal OT/IT devices, deploy a **local Zabbix Proxy** at each remote site.
+
+```
+       ┌────────────────────────────────────────────────────────────────────────┐
+       │                 CENTRAL CLOUD / HQ KUBERNETES CLUSTER                  │
+       │                                                                        │
+       │   Zabbix HA Server Cluster (Active / Standby)                          │
+       │   Ingress / Gateway: zbx-srv.chetan.local:10051 (TCP)                  │
+       │   cert-manager: ClusterIssuer (Root CA)                                │
+       └──────────────▲──────────────────────────▲──────────────────────────▲───┘
+                      │                          │                          │
+           mTLS (TCP 10051)           mTLS (TCP 10051)           mTLS (TCP 10051)
+           Client Certificate         Client Certificate         Client Certificate
+                      │                          │                          │
+        ┌─────────────┴──────────┐ ┌─────────────┴──────────┐ ┌─────────────┴──────────┐
+        │   INDIA SITE (Mumbai)  │ │   CHINA SITE (Shanghai)│ │     US SITE (Dallas)   │
+        │ ┌────────────────────┐ │ │ ┌────────────────────┐ │ │ ┌────────────────────┐ │
+        │ │ Zabbix Proxy       │ │ │ │ Zabbix Proxy       │ │ │ │ Zabbix Proxy       │ │
+        │ │ (zbx-proxy-in)     │ │ │ │ (zbx-proxy-cn)     │ │ │ │ (zbx-proxy-us)     │ │
+        │ └─────────┬──────────┘ │ │ └─────────┬──────────┘ │ │ └─────────┬──────────┘ │
+        │           │ LAN        │ │           │ LAN        │ │           │ LAN        │
+        │     ┌─────┴─────┐      │ │     ┌─────┴─────┐      │ │     ┌─────┴─────┐      │
+        │     ▼           ▼      │ │     ▼           ▼      │ │     ▼           ▼      │
+        │  Switches     PLCs     │ │  Switches     PLCs     │ │  Switches     PLCs     │
+        └────────────────────────┘ └────────────────────────┘ └────────────────────────┘
+```
+
+---
+
+### Step-by-Step Guide: Onboarding a Regional Remote Proxy (e.g., India Site)
+
+#### Step 1: Issue an X.509 Certificate for the Remote Proxy
+Create a Certificate manifest pointing to your Central CA (`local-ca-issuer`):
+
+```yaml
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: zabbix-proxy-in-tls
+  namespace: zabbix
+spec:
+  secretName: zabbix-proxy-in-tls-secret
+  issuerRef:
+    name: local-ca-issuer
+    kind: ClusterIssuer
+  commonName: "zbx-proxy-in"
+  dnsNames:
+    - "zbx-proxy-in"
+    - "zbx-proxy-in.chetan.local"
+  duration: 8760h   # 1 year
+  renewBefore: 720h # 30 days
+  privateKey:
+    algorithm: RSA
+    size: 2048
+```
+
+Export the generated certificate and CA to the remote site:
+```bash
+# Extract CA certificate, Proxy certificate, and Proxy private key
+kubectl get secret zabbix-proxy-in-tls-secret -n zabbix -o jsonpath='{.data.ca\.crt}' | base64 -d > /etc/zabbix/tls/ca.crt
+kubectl get secret zabbix-proxy-in-tls-secret -n zabbix -o jsonpath='{.data.tls\.crt}' | base64 -d > /etc/zabbix/tls/zbx_proxy_in.crt
+kubectl get secret zabbix-proxy-in-tls-secret -n zabbix -o jsonpath='{.data.tls\.key}' | base64 -d > /etc/zabbix/tls/zbx_proxy_in.key
+
+# Set secure permissions
+chmod 644 /etc/zabbix/tls/ca.crt /etc/zabbix/tls/zbx_proxy_in.crt
+chmod 600 /etc/zabbix/tls/zbx_proxy_in.key
+chown -R zabbix:zabbix /etc/zabbix/tls/
+```
+
+---
+
+#### Step 2: Configure `zabbix_proxy.conf` at Remote Site
+On the regional proxy server (Docker, Linux VM, or lightweight edge device):
+
+```ini
+# Proxy Identification
+Hostname=zbx-proxy-in
+ProxyMode=0                                # Active proxy (initiates outbound connection)
+
+# Central Server Endpoint
+Server=zbx-srv.chetan.local                # Central Server FQDN or Public IP
+ServerPort=10051
+
+# Local SQLite3 Buffer Database
+DBName=/var/lib/zabbix/zabbix_proxy.db
+
+# ------------------------------------------------------------------------------
+# mTLS Certificate Encryption
+# ------------------------------------------------------------------------------
+TLSConnect=cert
+TLSAccept=cert
+TLSCAFile=/etc/zabbix/tls/ca.crt
+TLSCertFile=/etc/zabbix/tls/zbx_proxy_in.crt
+TLSKeyFile=/etc/zabbix/tls/zbx_proxy_in.key
+
+# Optional Strict Identity Validation
+TLSServerCertSubject=CN=zbx-srv.chetan.local
+```
+
+Restart the remote proxy service:
+```bash
+sudo systemctl restart zabbix-proxy
+```
+
+---
+
+#### Step 3: Register Remote Proxy in Central Zabbix Web UI
+1. Log in to the Central Zabbix Web UI (`https://zabbix.chetan.local`).
+2. Go to **Administration > Proxies** -> click **Create proxy**.
+3. **Proxy Tab**:
+   * **Proxy name**: `zbx-proxy-in` (must match `Hostname` in `zabbix_proxy.conf` exactly).
+   * **Proxy mode**: `Active`.
+4. **Encryption Tab**:
+   * **Connections to proxy**: `Certificate`.
+   * **Connections from proxy**: Check **`Certificate`** (uncheck `No encryption`).
+   * **Issuer**: (Optional) match CA Common Name.
+   * **Subject**: `CN=zbx-proxy-in`.
+5. Click **Add**.
+
+Within 10-15 seconds, the new regional proxy performs an encrypted TLS handshake with the Central Server and transitions to **`Online`** (green badge).
+
+---
+
+#### Step 4: Assign Remote Site Devices to Regional Proxy
+When adding devices at the India site (switches, PLCs, servers):
+* In **Data collection > Hosts**, set **Monitored by proxy**: **`zbx-proxy-in`**.
+* The proxy polls local devices over the internal LAN (SNMP, Modbus TCP, Agent 2) and forwards all telemetry securely to the central cloud over mTLS, with local buffering during internet outages.
+
