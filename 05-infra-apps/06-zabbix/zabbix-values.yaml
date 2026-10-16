@@ -463,8 +463,6 @@ extraManifests:
                 - name: ZBX_TLSKEYFILE
                   value: "/etc/zabbix/tls/tls.key"
               volumeMounts:
-                - name: proxy-data
-                  mountPath: /var/lib/zabbix
                 - name: zabbix-proxy-tls
                   mountPath: /etc/zabbix/tls
                   readOnly: true
@@ -475,8 +473,6 @@ extraManifests:
                 limits:
                   memory: 512Mi
           volumes:
-            - name: proxy-data
-              emptyDir: {}
             - name: zabbix-proxy-tls
               secret:
                 secretName: zabbix-proxy-tls-secret
