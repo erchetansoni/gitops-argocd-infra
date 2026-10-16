@@ -36,8 +36,14 @@ spec:
   issuerRef:
     name: local-ca-issuer
     kind: ClusterIssuer
-  commonName: "zbx-proxy"
+  commonName: "IN-ZBX-PROXY"
   dnsNames:
+    - "IN-ZBX-PROXY"
+    - "IN-ZBX-PROXY-0"
+    - "IN-ZBX-PROXY-1"
+    - "in-zbx-proxy-1"
+    - "in-zbx-proxy-1.zabbix.svc"
+    - "in-zbx-proxy-1.zabbix.svc.cluster.local"
     - "zbx-proxy"
     - "zbx-proxy.chetan.local"
     - "zabbix-zabbix-proxy"

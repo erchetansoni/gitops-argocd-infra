@@ -132,7 +132,7 @@ zabbixProxy:
     tag: "alpine-7.4.15"
     pullPolicy: IfNotPresent
   ZBX_PROXYMODE: 0 # Active proxy
-  ZBX_HOSTNAME: "zbx-proxy"
+  ZBX_HOSTNAME: "IN-ZBX-PROXY-0"
   ZBX_SERVER_HOST: "zabbix-zabbix-server;zabbix-zabbix-server-standby"
   ZBX_SERVER_PORT: 10051
   service:
@@ -393,6 +393,94 @@ extraManifests:
       privateKey:
         algorithm: RSA
         size: 2048
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: in-zbx-proxy-1
+      namespace: zabbix
+      labels:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: proxy-1
+    spec:
+      type: ClusterIP
+      selector:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: proxy-1
+      ports:
+        - name: zabbix-proxy
+          port: 10051
+          targetPort: 10051
+          protocol: TCP
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: in-zbx-proxy-1
+      namespace: zabbix
+      labels:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: proxy-1
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: zabbix
+          app.kubernetes.io/component: proxy-1
+      strategy:
+        type: Recreate
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: zabbix
+            app.kubernetes.io/component: proxy-1
+            app.kubernetes.io/instance: zabbix
+        spec:
+          serviceAccountName: zabbix
+          containers:
+            - name: zabbix-proxy
+              image: zabbix/zabbix-proxy-sqlite3:alpine-7.4.15
+              imagePullPolicy: IfNotPresent
+              ports:
+                - name: zabbix-proxy
+                  containerPort: 10051
+                  protocol: TCP
+              env:
+                - name: ZBX_PROXYMODE
+                  value: "0"
+                - name: ZBX_HOSTNAME
+                  value: "IN-ZBX-PROXY-1"
+                - name: ZBX_SERVER_HOST
+                  value: "zabbix-zabbix-server;zabbix-zabbix-server-standby"
+                - name: ZBX_SERVER_PORT
+                  value: "10051"
+                - name: ZBX_TLSCONNECT
+                  value: "cert"
+                - name: ZBX_TLSACCEPT
+                  value: "cert,unencrypted"
+                - name: ZBX_TLSCAFILE
+                  value: "/etc/zabbix/tls/ca.crt"
+                - name: ZBX_TLSCERTFILE
+                  value: "/etc/zabbix/tls/tls.crt"
+                - name: ZBX_TLSKEYFILE
+                  value: "/etc/zabbix/tls/tls.key"
+              volumeMounts:
+                - name: proxy-data
+                  mountPath: /var/lib/zabbix
+                - name: zabbix-proxy-tls
+                  mountPath: /etc/zabbix/tls
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 512Mi
+          volumes:
+            - name: proxy-data
+              emptyDir: {}
+            - name: zabbix-proxy-tls
+              secret:
+                secretName: zabbix-proxy-tls-secret
+                defaultMode: 0444
   - apiVersion: cert-manager.io/v1
     kind: Certificate
     metadata:
@@ -403,8 +491,14 @@ extraManifests:
       issuerRef:
         name: local-ca-issuer
         kind: ClusterIssuer
-      commonName: "zbx-proxy"
+      commonName: "IN-ZBX-PROXY"
       dnsNames:
+        - "IN-ZBX-PROXY"
+        - "IN-ZBX-PROXY-0"
+        - "IN-ZBX-PROXY-1"
+        - "in-zbx-proxy-1"
+        - "in-zbx-proxy-1.zabbix.svc"
+        - "in-zbx-proxy-1.zabbix.svc.cluster.local"
         - "zbx-proxy"
         - "zbx-proxy.chetan.local"
         - "zabbix-zabbix-proxy"

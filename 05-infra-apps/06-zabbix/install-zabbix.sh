@@ -115,7 +115,7 @@ fi
 # Step 3: Wait for Workloads Rollout
 echo ""
 echo "⏳ Step 3: Waiting for Zabbix workloads rollout to complete..."
-for d in "${RELEASE_NAME}-zabbix-server" "${RELEASE_NAME}-zabbix-server-standby" "${RELEASE_NAME}-zabbix-web"; do
+for d in "${RELEASE_NAME}-zabbix-server" "${RELEASE_NAME}-zabbix-server-standby" "${RELEASE_NAME}-zabbix-web" "in-zbx-proxy-1"; do
   if kubectl get deployment "$d" -n "${NAMESPACE}" >/dev/null 2>&1; then
     echo "   Checking deployment: $d..."
     kubectl rollout status deployment/"$d" -n "${NAMESPACE}" --timeout=180s || true
@@ -134,18 +134,30 @@ if kubectl get daemonset "${RELEASE_NAME}-zabbix-agent" -n "${NAMESPACE}" >/dev/
   kubectl rollout status daemonset/"${RELEASE_NAME}-zabbix-agent" -n "${NAMESPACE}" --timeout=120s || true
 fi
 
-# Step 3b: Bootstrap Proxy & Agent Interface
+# Step 3b: Bootstrap Proxy Group & Server Agent Interface
 echo ""
-echo "⚙️ Step 3b: Bootstrapping active proxy & server agent interface..."
+echo "⚙️ Step 3b: Bootstrapping Proxy Group 'IN-ZBX-PROXY' & server agent interface..."
 for i in {1..30}; do
   if kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c "SELECT 1 FROM interface WHERE interfaceid = 1;" >/dev/null 2>&1; then
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
       "UPDATE interface SET useip = 0, dns = '${RELEASE_NAME}-zabbix-agent' WHERE interfaceid = 1;" >/dev/null 2>&1 || true
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
-      "INSERT INTO proxy (proxyid, name, operating_mode, tls_connect, tls_accept) VALUES (1, 'zbx-proxy', 0, 4, 4) ON CONFLICT (name) DO UPDATE SET tls_connect = 4, tls_accept = 4;" >/dev/null 2>&1 || true
+      "INSERT INTO proxy_group (proxy_groupid, name, description, failover_delay, min_online) VALUES (1, 'IN-ZBX-PROXY', 'India Regional Proxy Group (Active HA)', '10s', '1') ON CONFLICT (proxy_groupid) DO UPDATE SET name = 'IN-ZBX-PROXY', failover_delay = '10s', min_online = '1';" >/dev/null 2>&1 || true
+    kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
+      "INSERT INTO proxy_group_rtdata (proxy_groupid, state) VALUES (1, 1) ON CONFLICT (proxy_groupid) DO UPDATE SET state = 1;" >/dev/null 2>&1 || true
+    kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
+      "UPDATE hosts SET monitored_by = 2, proxy_groupid = 1, proxyid = NULL WHERE host = 'IN-LAP-CHETAN';" >/dev/null 2>&1 || true
+    kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
+      "UPDATE proxy SET name = 'IN-ZBX-PROXY-0', operating_mode = 0, tls_connect = 4, tls_accept = 4, proxy_groupid = 1, local_address = 'zabbix-zabbix-proxy', local_port = '10051', address = 'zabbix-zabbix-proxy', port = '10051' WHERE proxyid = 1;" >/dev/null 2>&1 || true
+    kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
+      "INSERT INTO proxy (proxyid, name, operating_mode, tls_connect, tls_accept, proxy_groupid, local_address, local_port, address, port) VALUES (1, 'IN-ZBX-PROXY-0', 0, 4, 4, 1, 'zabbix-zabbix-proxy', '10051', 'zabbix-zabbix-proxy', '10051') ON CONFLICT (name) DO UPDATE SET tls_connect = 4, tls_accept = 4, proxy_groupid = 1, local_address = 'zabbix-zabbix-proxy', local_port = '10051';" >/dev/null 2>&1 || true
+    kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
+      "INSERT INTO proxy (proxyid, name, operating_mode, tls_connect, tls_accept, proxy_groupid, local_address, local_port, address, port) VALUES (2, 'IN-ZBX-PROXY-1', 0, 4, 4, 1, 'in-zbx-proxy-1', '10051', 'in-zbx-proxy-1', '10051') ON CONFLICT (name) DO UPDATE SET tls_connect = 4, tls_accept = 4, proxy_groupid = 1, local_address = 'in-zbx-proxy-1', local_port = '10051';" >/dev/null 2>&1 || true
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
       "INSERT INTO proxy_rtdata (proxyid, state, version, compatibility) VALUES (1, 2, 70415, 1) ON CONFLICT (proxyid) DO UPDATE SET state = 2, version = 70415, compatibility = 1;" >/dev/null 2>&1 || true
-    echo "✅ Zabbix active proxy 'zbx-proxy' registered and server agent interface configured."
+    kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
+      "INSERT INTO proxy_rtdata (proxyid, state, version, compatibility) VALUES (2, 2, 70415, 1) ON CONFLICT (proxyid) DO UPDATE SET state = 2, version = 70415, compatibility = 1;" >/dev/null 2>&1 || true
+    echo "✅ Zabbix Proxy Group 'IN-ZBX-PROXY' (Proxies: IN-ZBX-PROXY-0, IN-ZBX-PROXY-1) registered with mTLS certificates."
     break
   fi
   sleep 2
