@@ -932,31 +932,28 @@ Furthermore, the agent is configured in a **Hybrid Dual-Mode** adhering to indus
 
 ---
 
-### 📋 Step-by-Step Configuration Guide
+### 📋 Step-by-Step Configuration Guide (Single Fleet Wildcard Certificate)
 
-#### Step 1: Issue Host Certificate via cert-manager
+#### Step 1: Issue Single Fleet Wildcard Certificate via cert-manager
 
-Add the host certificate definition to [`zabbix-certificates.yaml`](zabbix-certificates.yaml):
+Instead of generating a unique certificate for every machine, generate **ONE** long-lived Fleet Certificate in [`zabbix-certificates.yaml`](zabbix-certificates.yaml):
 
 ```yaml
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: zabbix-agent-in-lap-chetan-tls
+  name: zabbix-agent-fleet-tls
   namespace: zabbix
 spec:
-  secretName: zabbix-agent-in-lap-chetan-tls-secret
+  secretName: zabbix-agent-fleet-tls-secret
   issuerRef:
     name: local-ca-issuer
     kind: ClusterIssuer
-  commonName: "IN-LAP-CHETAN"
+  commonName: "*.agents.chetan.local"
   dnsNames:
-    - "IN-LAP-CHETAN"
-    - "host.docker.internal"
-    - "localhost"
-  ipAddresses:
-    - "127.0.0.1"
-  duration: 8760h   # 1 year
+    - "*.agents.chetan.local"
+    - "zabbix-agent-fleet"
+  duration: 26280h # 3 years (long-lived for fleet distribution)
   renewBefore: 720h # 30 days
   privateKey:
     algorithm: RSA
@@ -966,37 +963,37 @@ spec:
 Apply and verify secret creation:
 ```bash
 kubectl apply -f zabbix-certificates.yaml -n zabbix
-kubectl get certificate -n zabbix zabbix-agent-in-lap-chetan-tls
+kubectl get certificate -n zabbix zabbix-agent-fleet-tls
 ```
 
 ---
 
-#### Step 2: Export Certificates to Windows Host
+#### Step 2: Export Fleet Certificate Files for Fleet Distribution
 
-Export the CA, Client Certificate, and Private Key from Kubernetes to the Windows host directory `C:\ProgramData\zabbix\tls\`:
+Export the CA, Fleet Certificate, and Fleet Private Key from Kubernetes. These 3 files can be packaged into your standard software deployment package (MSI installer, Active Directory GPO, Ansible playbook, or Golden Image):
 
 ```powershell
-# Create TLS storage directory
+# Create TLS storage directory on target host
 New-Item -ItemType Directory -Force -Path "C:\ProgramData\zabbix\tls"
 
-# Extract CA certificate
-$ca = kubectl get secret -n zabbix zabbix-agent-in-lap-chetan-tls-secret -o jsonpath='{.data.ca\.crt}'
+# Extract Root CA certificate
+$ca = kubectl get secret -n zabbix zabbix-agent-fleet-tls-secret -o jsonpath='{.data.ca\.crt}'
 [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($ca)) | Out-File -FilePath "C:\ProgramData\zabbix\tls\ca.crt" -Encoding ascii
 
-# Extract Host Certificate
-$crt = kubectl get secret -n zabbix zabbix-agent-in-lap-chetan-tls-secret -o jsonpath='{.data.tls\.crt}'
-[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($crt)) | Out-File -FilePath "C:\ProgramData\zabbix\tls\in_lap_chetan.crt" -Encoding ascii
+# Extract Fleet Certificate
+$crt = kubectl get secret -n zabbix zabbix-agent-fleet-tls-secret -o jsonpath='{.data.tls\.crt}'
+[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($crt)) | Out-File -FilePath "C:\ProgramData\zabbix\tls\fleet.crt" -Encoding ascii
 
-# Extract Host Private Key
-$key = kubectl get secret -n zabbix zabbix-agent-in-lap-chetan-tls-secret -o jsonpath='{.data.tls\.key}'
-[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($key)) | Out-File -FilePath "C:\ProgramData\zabbix\tls\in_lap_chetan.key" -Encoding ascii
+# Extract Fleet Private Key
+$key = kubectl get secret -n zabbix zabbix-agent-fleet-tls-secret -o jsonpath='{.data.tls\.key}'
+[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($key)) | Out-File -FilePath "C:\ProgramData\zabbix\tls\fleet.key" -Encoding ascii
 ```
 
 ---
 
-#### Step 3: Configure `zabbix_agent2.conf`
+#### Step 3: Configure Universal `zabbix_agent2.conf`
 
-Create or update `C:\ProgramData\zabbix\zabbix_agent2.conf`:
+All 100s of hosts can use the exact same base configuration file (only changing `Hostname` or leaving `HostnameItem=system.hostname` to auto-detect the Windows computer name):
 
 ```ini
 ### GENERAL PARAMETERS
@@ -1004,6 +1001,8 @@ LogType=file
 LogFile=C:\ProgramData\zabbix\zabbix_agent2.log
 LogFileSize=10
 Hostname=IN-LAP-CHETAN
+# Or use automatic hostname detection for all fleet hosts:
+# HostnameItem=system.hostname
 
 ### PASSIVE CHECKS (SECONDARY)
 # Authorized proxies and container networks allowed to pull metrics
@@ -1016,12 +1015,12 @@ ServerActive=zbx-proxy.chetan.local:10051
 BufferSize=1000
 BufferSend=5
 
-### TLS ENCRYPTION (X.509 CERTIFICATE)
+### TLS ENCRYPTION (X.509 FLEET CERTIFICATE)
 TLSConnect=cert
 TLSAccept=cert
 TLSCAFile=C:\ProgramData\zabbix\tls\ca.crt
-TLSCertFile=C:\ProgramData\zabbix\tls\in_lap_chetan.crt
-TLSKeyFile=C:\ProgramData\zabbix\tls\in_lap_chetan.key
+TLSCertFile=C:\ProgramData\zabbix\tls\fleet.crt
+TLSKeyFile=C:\ProgramData\zabbix\tls\fleet.key
 ```
 
 Verify configuration syntax:
@@ -1047,27 +1046,61 @@ Or run directly in standalone background mode:
 
 ---
 
-#### Step 5: Update Zabbix Database & Enforce Host Encryption
+#### Step 5: Onboard Hosts: Manual or Automated Flow
 
-Update the host record in PostgreSQL to enforce Certificate encryption for both incoming (passive) and outgoing (active) checks:
+##### Flow A: Automated Registration (Zero Touch for 100s of Hosts)
+In Zabbix Web UI (**Alerts > Actions > Autoregistration actions**):
+1. Create an Action: `Auto-register Windows Fleet`.
+2. **Condition**: Host name contains `IN-LAP` or `SRV-`.
+3. **Operations**:
+   * Add host
+   * Link to template: `Windows by Zabbix agent active`
+   * Assign to Proxy Group: `IN-ZBX-PROXY`
+4. When a new computer starts the agent with `fleet.crt` and `fleet.key`, it automatically establishes an mTLS connection and joins Zabbix with zero manual intervention.
 
+##### Flow B: Manual Host Configuration
+Update the host record in PostgreSQL or via the Web UI:
 ```bash
 kubectl exec -n zabbix zabbix-postgresql-0 -- psql -U zabbix -d zabbix -c "
   UPDATE hosts
   SET tls_connect = 4,
       tls_accept = 4,
-      tls_subject = 'CN=IN-LAP-CHETAN'
+      tls_subject = 'CN=*.agents.chetan.local'
   WHERE host = 'IN-LAP-CHETAN';
 
   UPDATE host_proxy
   SET tls_accept = 4,
-      tls_subject = 'CN=IN-LAP-CHETAN'
-  WHERE host = 'IN-LAP-CHETAN';
+      tls_subject = 'CN=*.agents.chetan.local'
+  WHERE hostid = (SELECT hostid FROM hosts WHERE host = 'IN-LAP-CHETAN');
 "
 
 # Reload server config cache
 kubectl exec -n zabbix $(kubectl get pod -n zabbix -l app.kubernetes.io/component=server -o jsonpath='{.items[0].metadata.name}') -c zabbix-server -- zabbix_server -R config_cache_reload
 ```
+
+---
+
+### 🌐 Sub-Domain & DNS Architecture Clarification
+
+#### Do we need a separate sub-domain for the Zabbix Standby Server?
+**NO. Standby Server does NOT need its own subdomain or external route.**
+* In active-passive Zabbix HA, **only the Active Server node accepts incoming traffic**.
+* The Standby node runs in passive listening standby mode, communicating only with PostgreSQL and tracking the `ha_node` table heartbeat.
+* When failover occurs, the Standby promotes itself to Active. Both server pods are fronted internally by Kubernetes Service `zabbix-zabbix-server:10051` and externally by Gateway route `zbx-srv.chetan.local:10051`.
+* Giving the standby node a separate subdomain is an anti-pattern because external proxies and agents should never route traffic to an inactive standby node.
+
+#### Complete List of Required Sub-Domains:
+Across the entire platform, only **4 sub-domains** are needed:
+
+| Sub-Domain FQDN | Port / Protocol | Target Workload | Description |
+| :--- | :--- | :--- | :--- |
+| **`zabbix.chetan.local`** | `443` (HTTPS) | `zabbix-zabbix-web` | Web UI Dashboard & JSON-RPC API |
+| **`zbx-srv.chetan.local`** | `10051` (TCP) | `zabbix-zabbix-server` (Active) | Central Server Trapper (used by remote regional proxies) |
+| **`zbx-proxy.chetan.local`** | `10051` (TCP) | `zabbix-zabbix-proxy` | Regional Proxy Trapper (used by local agents & devices) |
+| **`zbx-snmp.chetan.local`** | `162` (UDP) | `zabbix-snmptraps` | SNMP Trapper daemon (used by network switches/PLCs) |
+
+> [!TIP]
+> **Production DNS Simplification**: In production, configuring a single wildcard DNS entry `*.chetan.local` pointing to the Traefik Gateway IP automatically resolves all current and future subdomains without creating individual DNS records.
 
 ---
 
@@ -1079,21 +1112,13 @@ In the Zabbix Web UI, **`IN-LAP-CHETAN`** is actively monitored through **`IN-ZB
 
 ![Zabbix Host CERT Encryption Proof](images/zabbix_host_cert_encryption.png)
 
-* **Proxy Column**: Displays `IN-ZBX-PROXY: IN-ZBX-PROXY-0` (monitored by regional proxy group, active node 0).
-* **Availability Column**: Displays green `ZBX` badge indicating live, successful agent communication.
-* **Agent Encryption Column**: Displays green `CERT` badge confirming strict X.509 certificate validation.
-
 ---
 
-#### 2. Live Proxy Trapper Logs (Active Check Verification)
+#### 2. Host Configuration > Encryption Tab
 
-Inspecting `zabbix-zabbix-proxy-0` logs confirms the mutual TLS handshake and streaming metric ingestion from `IN-LAP-CHETAN`:
+Inspecting the Host Encryption settings confirms that both inbound (passive) and outbound (active) connections use **Certificate** encryption matching the fleet wildcard Subject `CN=*.agents.chetan.local`:
 
-```text
-zbx_tls_accept() peer certificate issuer:"CN=Avgol Internal Root CA,O=Avgol Nonwovens,L=Dimona,ST=South,C=IL" subject:"CN=IN-LAP-CHETAN"
-trapper got '{"request":"active checks","host":"IN-LAP-CHETAN","version":"7.4.15"}'
-trapper got '{"request":"agent data","data":[{"id":1,"itemid":48020,"value":"16384","clock":1792148400,"ns":123456789},...],"session":"a1b2c3d4..."}'
-```
+![Zabbix Host Fleet Encryption Details](images/zabbix_host_fleet_encryption.png)
 
 ---
 
