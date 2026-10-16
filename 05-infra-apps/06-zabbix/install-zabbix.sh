@@ -146,7 +146,9 @@ for i in {1..30}; do
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
       "INSERT INTO proxy_group_rtdata (proxy_groupid, state) VALUES (1, 1) ON CONFLICT (proxy_groupid) DO UPDATE SET state = 1;" >/dev/null 2>&1 || true
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
-      "UPDATE hosts SET monitored_by = 2, proxy_groupid = 1, proxyid = NULL WHERE host = 'IN-LAP-CHETAN';" >/dev/null 2>&1 || true
+      "UPDATE hosts SET monitored_by = 2, proxy_groupid = 1, proxyid = NULL, tls_connect = 4, tls_accept = 4, tls_subject = 'CN=IN-LAP-CHETAN' WHERE host = 'IN-LAP-CHETAN';" >/dev/null 2>&1 || true
+    kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
+      "UPDATE host_proxy SET tls_accept = 4, tls_subject = 'CN=IN-LAP-CHETAN' WHERE host = 'IN-LAP-CHETAN';" >/dev/null 2>&1 || true
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
       "UPDATE proxy SET name = 'IN-ZBX-PROXY-0', operating_mode = 0, tls_connect = 4, tls_accept = 4, proxy_groupid = 1, local_address = 'zabbix-zabbix-proxy', local_port = '10051', address = 'zabbix-zabbix-proxy', port = '10051' WHERE proxyid = 1;" >/dev/null 2>&1 || true
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \

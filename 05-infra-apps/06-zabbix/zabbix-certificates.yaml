@@ -57,3 +57,26 @@ spec:
   privateKey:
     algorithm: RSA
     size: 2048
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: zabbix-agent-in-lap-chetan-tls
+  namespace: zabbix
+spec:
+  secretName: zabbix-agent-in-lap-chetan-tls-secret
+  issuerRef:
+    name: local-ca-issuer
+    kind: ClusterIssuer
+  commonName: "IN-LAP-CHETAN"
+  dnsNames:
+    - "IN-LAP-CHETAN"
+    - "localhost"
+  ipAddresses:
+    - "127.0.0.1"
+    - "192.168.1.206"
+  duration: 8760h # 1 year
+  renewBefore: 720h # 30 days
+  privateKey:
+    algorithm: RSA
+    size: 2048
