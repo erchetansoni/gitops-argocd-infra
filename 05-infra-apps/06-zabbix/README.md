@@ -589,8 +589,9 @@ To ensure bank-grade security across untrusted networks and the public internet,
    * `ZBX_TLSKEYFILE: "/etc/zabbix/tls/tls.key"`
 4. **Database-Level Strict Enforcement**:
    In PostgreSQL `proxy` table:
-   * `tls_connect = 2` (`ZBX_TCP_SEC_TLS_CERT`)
-   * `tls_accept = 2` (`ZBX_TCP_SEC_TLS_CERT`)
+   * `tls_connect = 4` (`HOST_ENCRYPTION_CERTIFICATE`)
+   * `tls_accept = 4` (`HOST_ENCRYPTION_CERTIFICATE`)
+   * *(Note: In Zabbix database constants: `1 = None`, `2 = PSK`, `4 = Certificate`)*.
    * If any unencrypted client tries to impersonate the proxy, the server terminates the socket immediately:
      `cannot accept connection from proxy "zbx-proxy": connection of type "unencrypted" is not allowed for proxy "zbx-proxy"`.
 

@@ -142,7 +142,7 @@ for i in {1..30}; do
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
       "UPDATE interface SET useip = 0, dns = '${RELEASE_NAME}-zabbix-agent' WHERE interfaceid = 1;" >/dev/null 2>&1 || true
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
-      "INSERT INTO proxy (proxyid, name, operating_mode, tls_connect, tls_accept) VALUES (1, 'zbx-proxy', 0, 2, 2) ON CONFLICT (name) DO UPDATE SET tls_connect = 2, tls_accept = 2;" >/dev/null 2>&1 || true
+      "INSERT INTO proxy (proxyid, name, operating_mode, tls_connect, tls_accept) VALUES (1, 'zbx-proxy', 0, 4, 4) ON CONFLICT (name) DO UPDATE SET tls_connect = 4, tls_accept = 4;" >/dev/null 2>&1 || true
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
       "INSERT INTO proxy_rtdata (proxyid, state, version, compatibility) VALUES (1, 2, 70415, 1) ON CONFLICT (proxyid) DO UPDATE SET state = 2, version = 70415, compatibility = 1;" >/dev/null 2>&1 || true
     echo "✅ Zabbix active proxy 'zbx-proxy' registered and server agent interface configured."
