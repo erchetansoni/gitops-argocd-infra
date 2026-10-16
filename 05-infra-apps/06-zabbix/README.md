@@ -47,7 +47,13 @@ Enterprise-grade distributed monitoring platform deployed natively on Kubernetes
 * **Active-Passive Redundancy**: Two Zabbix Server instances (`zabbix-zabbix-server` and `zabbix-zabbix-server-standby`) run simultaneously against the same TimescaleDB database.
 * **Database Heartbeat & Auto-Discovery**: Nodes register themselves into the database `ha_node` table via `ZBX_AUTOHANODENAME: "hostname"` and send heartbeats every 5 seconds.
 * **Automatic Failover**: One node is elected **`Active`** (executes pollers, alerts, escalators), while the other node stays in **`Standby`** mode. If the active node crashes or restarts, the standby node promotes itself to Active within seconds with zero data loss.
+* **Automated Orphan Node Cleanup (`haNodesAutoClean`)**: When Kubernetes rolls out new pods or restarts nodes, previous pods gracefully stop. To ensure the cluster status page (`report.status`) only shows active/standby nodes without displaying stale terminated servers, an automated CronJob (`haNodesAutoClean`) runs every 5 minutes (`*/5 * * * *`) purging stopped and unavailable nodes older than 300 seconds:
+  ```sql
+  DELETE FROM ha_node WHERE status IN (1, 2) AND EXTRACT(epoch FROM now()) - lastaccess > 300;
+  ```
 * **Frontend Cluster Discovery**: The Web frontend automatically queries the database `ha_node` table and routes user requests directly to the active cluster node.
+* **Live Clean HA Cluster Status**:
+  ![Zabbix Clean HA Cluster Status](images/zabbix_ha_clean_status.png)
 
 ### 2. Decoupled SNMP Trapper via Zabbix Proxy (Approach C)
 * **Dedicated SNMP Trapper Sidecar**: The `zabbix-snmptraps` container is attached as a sidecar to the primary **Zabbix Proxy** (`IN-ZBX-PROXY-0` in `zabbix-zabbix-proxy-0`) instead of the core server.

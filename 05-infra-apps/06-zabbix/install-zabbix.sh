@@ -159,6 +159,8 @@ for i in {1..30}; do
       "INSERT INTO proxy_rtdata (proxyid, state, version, compatibility) VALUES (1, 2, 70415, 1) ON CONFLICT (proxyid) DO UPDATE SET state = 2, version = 70415, compatibility = 1;" >/dev/null 2>&1 || true
     kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
       "INSERT INTO proxy_rtdata (proxyid, state, version, compatibility) VALUES (2, 2, 70415, 1) ON CONFLICT (proxyid) DO UPDATE SET state = 2, version = 70415, compatibility = 1;" >/dev/null 2>&1 || true
+    kubectl exec -n "${NAMESPACE}" "${RELEASE_NAME}-postgresql-0" -- psql -U zabbix -d zabbix -c \
+      "DELETE FROM ha_node WHERE status IN (1, 2);" >/dev/null 2>&1 || true
     echo "✅ Zabbix Proxy Group 'IN-ZBX-PROXY' (Proxies: IN-ZBX-PROXY-0, IN-ZBX-PROXY-1) registered with mTLS certificates."
     break
   fi

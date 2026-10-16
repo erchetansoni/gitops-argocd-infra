@@ -487,7 +487,12 @@ items:
               zabbixServerHA:
                 enabled: false
               haNodesAutoClean:
-                enabled: false
+                enabled: true
+                image:
+                  repository: timescale/timescaledb
+                  tag: "2.17.2-pg16"
+                schedule: "*/5 * * * *"
+                deleteOlderThanSeconds: 300
               service:
                 type: ClusterIP
                 port: 10051
