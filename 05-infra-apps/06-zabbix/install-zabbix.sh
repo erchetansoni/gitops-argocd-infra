@@ -167,6 +167,14 @@ for i in {1..30}; do
   sleep 2
 done
 
+# Step 3c: Bootstrap Kubernetes Cluster Monitoring (kube-state-metrics & RBAC)
+K8S_SETUP_SCRIPT="${SCRIPT_DIR}/setup-k8s-monitoring.sh"
+if [[ -f "${K8S_SETUP_SCRIPT}" ]]; then
+  echo ""
+  echo "☸️ Step 3c: Bootstrapping Kubernetes Cluster Monitoring..."
+  bash "${K8S_SETUP_SCRIPT}" || true
+fi
+
 # Step 4: Verification & Route Info
 echo ""
 echo "================================================================="

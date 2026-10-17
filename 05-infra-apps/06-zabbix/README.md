@@ -1144,5 +1144,146 @@ Get-Content C:\ProgramData\zabbix\zabbix_agent2.log -Tail 30
 kubectl logs -n zabbix zabbix-zabbix-proxy-0 -c zabbix-proxy --tail=50 | Select-String "IN-LAP-CHETAN"
 ```
 
+---
+
+## ☸️ Native Kubernetes Cluster Monitoring (Local & Remote Multi-Cluster)
+
+Zabbix provides full-stack, enterprise-grade monitoring for Kubernetes clusters out of the box using official templates, HTTP Agents, and Low-Level Discovery (LLD).
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                              KUBERNETES MONITORING STACK                               │
+│                                                                                        │
+│   ┌─────────────────────────┐   ┌──────────────────────────┐   ┌───────────────────┐   │
+│   │  Kubernetes API Server  │   │   kube-state-metrics     │   │ Kubelet / cAdvisor│   │
+│   │  (Port 443 / HTTPS)     │   │   (KSM Exporter :8080)   │   │ (Node Port 10250) │   │
+│   └────────────┬────────────┘   └────────────┬─────────────┘   └─────────┬─────────┘   │
+│                │                             │                           │             │
+│                │ Cluster LLD & Control Plane │ Object Statuses & Health  │ Container   │
+│                │ (/livez, /readyz, /metrics) │ (CrashLoop, Replicas, PV) │ CPU / Memory│
+│                ▼                             ▼                           ▼             │
+│   ┌────────────────────────────────────────────────────────────────────────────────┐   │
+│   │                      Zabbix Server or Remote Zabbix Proxy                      │   │
+│   │              (Template: Kubernetes cluster state by HTTP)                      │   │
+│   └────────────────────────────────────────────────────────────────────────────────┘   │
+│                                          ▲                                             │
+│                                          │ Node OS Metrics                             │
+│                           ┌──────────────┴─────────────┐                               │
+│                           │   Zabbix Agent 2           │                               │
+│                           │   (DaemonSet on each Node) │                               │
+│                           └────────────────────────────┘                               │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### ⚖️ `metrics-server` vs. `kube-state-metrics`: Why Both Are Needed
+
+| Dimension | `metrics-server` (Already Installed) 📊 | `kube-state-metrics` (Deploys via Manifest) 🛡️ |
+| :--- | :--- | :--- |
+| **Primary Goal** | Real-time resource utilization for cluster autoscaling & CLI | Comprehensive observability, object state telemetry & alerting |
+| **Data Source** | Kubelet summary API on each node | Kubernetes API Server (`etcd` object registry) |
+| **Who Consumes It?** | `kubectl top`, Horizontal Pod Autoscaler (HPA), VPA | **Zabbix**, Prometheus, Grafana, Datadog |
+| **Type of Metrics** | Pure numbers: Instant CPU cores & Memory bytes | Object states, conditions, replica counts, phases, restart counters |
+| **Crash & Alert Detection** | ❌ **No**: Cannot detect `CrashLoopBackOff`, `OOMKilled`, or errors | ✅ **Yes**: Alerts on pod restarts, container failure reasons, unready pods |
+| **Deployment / Replica Tracking**| ❌ **No**: Unaware of Deployments, StatefulSets, or DaemonSets | ✅ **Yes**: Alerts when `available_replicas < desired_replicas` |
+| **Persistent Volume Tracking** | ❌ **No**: Does not track PVs or PVCs | ✅ **Yes**: Alerts on PVC phase (`Bound`, `Pending`, `Lost`) and disk usage |
+| **Resource Footprint** | ~20–30 MB RAM | ~30–40 MB RAM |
+
+---
+
+### 🖥️ 1. Local Cluster Monitoring (Self - Where Zabbix Runs)
+
+Because Zabbix runs inside the cluster, it communicates directly with `https://kubernetes.default.svc:443` using an in-cluster **ServiceAccount token** with zero external network exposure.
+
+#### Architecture Components:
+* **Manifest**: [`zabbix-k8s-monitoring.yaml`](zabbix-k8s-monitoring.yaml)
+  * **RBAC**: ServiceAccount `zabbix-service-account` bound to `ClusterRole/zabbix-read-role` with read-only access to nodes, pods, services, endpoints, namespaces, deployments, statefulsets, daemonsets, persistentvolumes, persistentvolumeclaims, jobs, and cronjobs.
+  * **Secret**: `zabbix-service-account-token` (long-lived bearer token).
+  * **`kube-state-metrics`**: Lightweight deployment (`registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0`) and Service `zabbix-kube-state-metrics:8080`.
+* **Automated Setup Script**: [`setup-k8s-monitoring.sh`](setup-k8s-monitoring.sh)
+  * Applies the manifest.
+  * Retrieves the service account token.
+  * Uses the Zabbix JSON-RPC API to register host **`k8s-local-cluster`** linked to template **`Kubernetes cluster state by HTTP`**.
+  * Configures macros:
+    * `{$KUBE.API.URL}` = `https://kubernetes.default.svc:443`
+    * `{$KUBE.API.TOKEN}` = `<ServiceAccount-Bearer-Token>`
+    * `{$KUBE.STATE.ENDPOINT.NAME}` = `zabbix-kube-state-metrics`
+    * `{$HTTP.TLS.VERIFY}` = `none`
+
+---
+
+### 🌍 2. Remote Kubernetes Cluster Monitoring (Enterprise Best Practice)
+
+To monitor external or remote Kubernetes clusters (e.g., **AWS EKS, Google GKE, Azure AKS, on-premises bare-metal, or edge k3s clusters**), the **Remote Zabbix Proxy Pattern (Approach A)** is the global industry standard:
+
+```
+┌───────────────────────────────────────┐             ┌────────────────────────────────────────┐
+│     REMOTE CLUSTER (e.g. AWS EKS)     │             │     HQ CLUSTER (Central Zabbix)        │
+│                                       │             │                                        │
+│   ┌───────────────────────────────┐   │             │   ┌────────────────────────────────┐   │
+│   │ Remote K8s API + KSM          │   │             │   │ Central Zabbix Server Cluster  │   │
+│   │ (https://kubernetes.default)  │   │             │   │ (HQ-ZBX-SERVER)                │   │
+│   └───────────────┬───────────────┘   │             │   └────────────────▲───────────────┘   │
+│                   │                   │             │                    │               │
+│                   ▼                   │    mTLS     │                    │               │
+│   ┌───────────────────────────────┐   │  TCP 10051  │                    │               │
+│   │ Remote Zabbix Proxy Pod       ├───┼─────────────┼────────────────────┘               │
+│   │ (e.g. US-EKS-ZBX-PROXY)       │   │ (Outbound)  │                                    │
+│   └───────────────────────────────┘   │             │                                    │
+└───────────────────────────────────────┘             └────────────────────────────────────┘
+```
+
+#### Why the Remote Proxy Pattern is Best Practice:
+1. **Zero Inbound Firewall Exposure**: The remote cluster needs **no public API ingress** or open inbound ports. The remote proxy dials **outbound** to `zbx-srv.chetan.local:10051` over cert-manager mTLS.
+2. **Network Resilience & Buffering**: If the WAN or VPN drops between the remote cloud and HQ, the remote proxy buffers metrics locally in SQLite3 and flushes them as soon as connectivity resumes.
+3. **Local Latency**: The remote proxy performs high-frequency HTTP scrapes locally (`0.5ms` response time) instead of hauling uncompressed HTTP payloads across the internet.
+
+#### Ready-to-Use Remote Cluster Setup (in [`setup-k8s-monitoring.sh`](setup-k8s-monitoring.sh)):
+Part 2 of `setup-k8s-monitoring.sh` is pre-written and commented out, ready to be activated when onboarding a new cluster:
+```bash
+# 1. Deploy Zabbix Proxy & kube-state-metrics in the remote cluster pointing to zbx-srv.chetan.local:10051
+# 2. Extract the remote ServiceAccount token
+# 3. Uncomment Part 2 in setup-k8s-monitoring.sh and set:
+REMOTE_CLUSTER_NAME="k8s-aws-eks-prod"
+REMOTE_CLUSTER_DISPLAY_NAME="AWS EKS Production Cluster (US-East)"
+REMOTE_PROXY_NAME="US-EKS-ZBX-PROXY"
+REMOTE_K8S_TOKEN="<PASTE_REMOTE_SERVICE_ACCOUNT_TOKEN>"
+```
+
+---
+
+### 📸 Live End-to-End Verification Proof
+
+#### 1. Data Collection > Hosts (`https://zabbix.chetan.local/zabbix.php?action=host.list`)
+
+The host **`Kubernetes Local Cluster (Self)`** is actively monitored with over **1,500+ items**, **260+ triggers**, and **23 Low-Level Discovery (LLD) rules**:
+
+![Zabbix Kubernetes Monitoring Host Proof](images/zabbix_k8s_monitoring.png)
+
+* **Host Name**: `k8s-local-cluster`
+* **Display Name**: `Kubernetes Local Cluster (Self)`
+* **Template**: `Kubernetes cluster state by HTTP`
+* **Status**: **Enabled**
+* **Discovered Entities**: Automatically tracks all cluster nodes, namespaces, deployments, pods, and storage volumes in real time.
+
+---
+
+### 🔍 Verification Commands
+
+```bash
+# 1. Check kube-state-metrics deployment in zabbix namespace
+kubectl get pods -n zabbix -l app.kubernetes.io/name=kube-state-metrics
+
+# 2. Test metrics scrape from zabbix-server pod
+kubectl exec -n zabbix $(kubectl get pod -n zabbix -l app.kubernetes.io/component=server -o jsonpath='{.items[0].metadata.name}') -c zabbix-server -- \
+  wget -qO- http://zabbix-kube-state-metrics:8080/metrics | head -n 20
+
+# 3. Verify total discovered items in Zabbix Database
+kubectl exec -n zabbix zabbix-postgresql-0 -- psql -U zabbix -d zabbix -c \
+  "SELECT h.name, count(i.itemid) AS total_items FROM hosts h JOIN items i ON h.hostid = i.hostid WHERE h.host = 'k8s-local-cluster' GROUP BY h.name;"
+```
+
+
 
 
