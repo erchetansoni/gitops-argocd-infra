@@ -487,7 +487,12 @@ items:
               zabbixServerHA:
                 enabled: false
               haNodesAutoClean:
-                enabled: false
+                enabled: true
+                image:
+                  repository: timescale/timescaledb
+                  tag: "2.17.2-pg16"
+                schedule: "*/5 * * * *"
+                deleteOlderThanSeconds: 300
               service:
                 type: ClusterIP
                 port: 10051
@@ -500,6 +505,21 @@ items:
                   value: "hostname"
                 - name: ZBX_AUTONODEADDRESS
                   value: "hostname"
+                - name: ZBX_TLSCAFILE
+                  value: "/etc/zabbix/tls/ca.crt"
+                - name: ZBX_TLSCERTFILE
+                  value: "/etc/zabbix/tls/tls.crt"
+                - name: ZBX_TLSKEYFILE
+                  value: "/etc/zabbix/tls/tls.key"
+              extraVolumes:
+                - name: zabbix-server-tls
+                  secret:
+                    secretName: zabbix-server-tls-secret
+                    defaultMode: 0444
+              extraVolumeMounts:
+                - name: zabbix-server-tls
+                  mountPath: /etc/zabbix/tls
+                  readOnly: true
               resources:
                 requests:
                   cpu: 100m
@@ -537,7 +557,7 @@ items:
                 tag: "alpine-7.4.15"
                 pullPolicy: IfNotPresent
               ZBX_PROXYMODE: 0
-              ZBX_HOSTNAME: "zbx-proxy"
+              ZBX_HOSTNAME: "IN-ZBX-PROXY-0"
               ZBX_SERVER_HOST: "zabbix-zabbix-server;zabbix-zabbix-server-standby"
               ZBX_SERVER_PORT: 10051
               service:
@@ -551,6 +571,16 @@ items:
                   value: "1"
                 - name: ZBX_STARTSNMPTRAPPERS
                   value: "1"
+                - name: ZBX_TLSCONNECT
+                  value: "cert"
+                - name: ZBX_TLSACCEPT
+                  value: "cert,unencrypted"
+                - name: ZBX_TLSCAFILE
+                  value: "/etc/zabbix/tls/ca.crt"
+                - name: ZBX_TLSCERTFILE
+                  value: "/etc/zabbix/tls/tls.crt"
+                - name: ZBX_TLSKEYFILE
+                  value: "/etc/zabbix/tls/tls.key"
               extraContainers:
                 - name: zabbix-snmptraps
                   image: "zabbix/zabbix-snmptraps:alpine-7.4.15"
@@ -570,9 +600,16 @@ items:
               extraVolumes:
                 - name: snmptraps-dir
                   emptyDir: {}
+                - name: zabbix-proxy-tls
+                  secret:
+                    secretName: zabbix-proxy-tls-secret
+                    defaultMode: 0444
               extraVolumeMounts:
                 - name: snmptraps-dir
                   mountPath: /var/lib/zabbix/snmptraps
+                - name: zabbix-proxy-tls
+                  mountPath: /etc/zabbix/tls
+                  readOnly: true
               resources:
                 requests:
                   cpu: 50m
@@ -721,12 +758,188 @@ items:
                               valueFrom:
                                 fieldRef:
                                   fieldPath: status.podIP
+                            - name: ZBX_TLSCAFILE
+                              value: "/etc/zabbix/tls/ca.crt"
+                            - name: ZBX_TLSCERTFILE
+                              value: "/etc/zabbix/tls/tls.crt"
+                            - name: ZBX_TLSKEYFILE
+                              value: "/etc/zabbix/tls/tls.key"
+                          volumeMounts:
+                            - name: zabbix-server-tls
+                              mountPath: /etc/zabbix/tls
+                              readOnly: true
                           resources:
                             requests:
                               cpu: 100m
                               memory: 256Mi
                             limits:
                               memory: 1Gi
+                      volumes:
+                        - name: zabbix-server-tls
+                          secret:
+                            secretName: zabbix-server-tls-secret
+                            defaultMode: 0444
+              - apiVersion: cert-manager.io/v1
+                kind: Certificate
+                metadata:
+                  name: zabbix-server-tls
+                  namespace: zabbix
+                spec:
+                  secretName: zabbix-server-tls-secret
+                  issuerRef:
+                    name: local-ca-issuer
+                    kind: ClusterIssuer
+                  commonName: "zbx-srv.chetan.local"
+                  dnsNames:
+                    - "zbx-srv.chetan.local"
+                    - "zabbix-zabbix-server"
+                    - "zabbix-zabbix-server-standby"
+                    - "zabbix-zabbix-server.zabbix.svc.cluster.local"
+                    - "zabbix-zabbix-server-standby.zabbix.svc.cluster.local"
+                    - "zabbix-zabbix-server.zabbix.svc"
+                    - "zabbix-zabbix-server-standby.zabbix.svc"
+                    - "localhost"
+                  ipAddresses:
+                    - "127.0.0.1"
+                  duration: 8760h
+                  renewBefore: 720h
+                  privateKey:
+                    algorithm: RSA
+                    size: 2048
+              - apiVersion: v1
+                kind: Service
+                metadata:
+                  name: in-zbx-proxy-1
+                  namespace: zabbix
+                  labels:
+                    app.kubernetes.io/name: zabbix
+                    app.kubernetes.io/component: proxy-1
+                spec:
+                  type: ClusterIP
+                  selector:
+                    app.kubernetes.io/name: zabbix
+                    app.kubernetes.io/component: proxy-1
+                  ports:
+                    - name: zabbix-proxy
+                      port: 10051
+                      targetPort: 10051
+                      protocol: TCP
+              - apiVersion: apps/v1
+                kind: Deployment
+                metadata:
+                  name: in-zbx-proxy-1
+                  namespace: zabbix
+                  labels:
+                    app.kubernetes.io/name: zabbix
+                    app.kubernetes.io/component: proxy-1
+                spec:
+                  replicas: 1
+                  selector:
+                    matchLabels:
+                      app.kubernetes.io/name: zabbix
+                      app.kubernetes.io/component: proxy-1
+                  strategy:
+                    type: Recreate
+                  template:
+                    metadata:
+                      labels:
+                        app.kubernetes.io/name: zabbix
+                        app.kubernetes.io/component: proxy-1
+                        app.kubernetes.io/instance: zabbix
+                    spec:
+                      serviceAccountName: zabbix
+                      containers:
+                        - name: zabbix-proxy
+                          image: zabbix/zabbix-proxy-sqlite3:alpine-7.4.15
+                          imagePullPolicy: IfNotPresent
+                          ports:
+                            - name: zabbix-proxy
+                              containerPort: 10051
+                              protocol: TCP
+                          env:
+                            - name: ZBX_PROXYMODE
+                              value: "0"
+                            - name: ZBX_HOSTNAME
+                              value: "IN-ZBX-PROXY-1"
+                            - name: ZBX_SERVER_HOST
+                              value: "zabbix-zabbix-server;zabbix-zabbix-server-standby"
+                            - name: ZBX_SERVER_PORT
+                              value: "10051"
+                            - name: ZBX_TLSCONNECT
+                              value: "cert"
+                            - name: ZBX_TLSACCEPT
+                              value: "cert,unencrypted"
+                            - name: ZBX_TLSCAFILE
+                              value: "/etc/zabbix/tls/ca.crt"
+                            - name: ZBX_TLSCERTFILE
+                              value: "/etc/zabbix/tls/tls.crt"
+                            - name: ZBX_TLSKEYFILE
+                              value: "/etc/zabbix/tls/tls.key"
+                          volumeMounts:
+                            - name: zabbix-proxy-tls
+                              mountPath: /etc/zabbix/tls
+                              readOnly: true
+                          resources:
+                            requests:
+                              cpu: 50m
+                              memory: 128Mi
+                            limits:
+                              memory: 512Mi
+                      volumes:
+                        - name: zabbix-proxy-tls
+                          secret:
+                            secretName: zabbix-proxy-tls-secret
+                            defaultMode: 0444
+              - apiVersion: cert-manager.io/v1
+                kind: Certificate
+                metadata:
+                  name: zabbix-proxy-tls
+                  namespace: zabbix
+                spec:
+                  secretName: zabbix-proxy-tls-secret
+                  issuerRef:
+                    name: local-ca-issuer
+                    kind: ClusterIssuer
+                  commonName: "IN-ZBX-PROXY"
+                  dnsNames:
+                    - "IN-ZBX-PROXY"
+                    - "IN-ZBX-PROXY-0"
+                    - "IN-ZBX-PROXY-1"
+                    - "in-zbx-proxy-1"
+                    - "in-zbx-proxy-1.zabbix.svc"
+                    - "in-zbx-proxy-1.zabbix.svc.cluster.local"
+                    - "zbx-proxy"
+                    - "zbx-proxy.chetan.local"
+                    - "zabbix-zabbix-proxy"
+                    - "zabbix-zabbix-proxy.zabbix.svc.cluster.local"
+                    - "zabbix-zabbix-proxy.zabbix.svc"
+                    - "localhost"
+                  ipAddresses:
+                    - "127.0.0.1"
+                  duration: 8760h
+                  renewBefore: 720h
+                  privateKey:
+                    algorithm: RSA
+                    size: 2048
+              - apiVersion: cert-manager.io/v1
+                kind: Certificate
+                metadata:
+                  name: zabbix-agent-fleet-tls
+                  namespace: zabbix
+                spec:
+                  secretName: zabbix-agent-fleet-tls-secret
+                  issuerRef:
+                    name: local-ca-issuer
+                    kind: ClusterIssuer
+                  commonName: "*.agents.chetan.local"
+                  dnsNames:
+                    - "*.agents.chetan.local"
+                    - "zabbix-agent-fleet"
+                  duration: 26280h
+                  renewBefore: 720h
+                  privateKey:
+                    algorithm: RSA
+                    size: 2048
       destination:
         server: https://kubernetes.default.svc
         namespace: zabbix
