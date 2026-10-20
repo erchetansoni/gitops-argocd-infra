@@ -1,0 +1,234 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zabbix-service-account
+  namespace: zabbix
+  labels:
+    app.kubernetes.io/name: zabbix-monitoring
+    app.kubernetes.io/component: k8s-collector
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: zabbix-read-role
+  labels:
+    app.kubernetes.io/name: zabbix-monitoring
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/metrics
+      - nodes/proxy
+      - nodes/spec
+      - services
+      - endpoints
+      - pods
+      - namespaces
+      - persistentvolumes
+      - persistentvolumeclaims
+      - componentstatuses
+      - configmaps
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources:
+      - daemonsets
+      - deployments
+      - replicasets
+      - statefulsets
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["get", "list", "watch"]
+  - nonResourceURLs:
+      - "/livez"
+      - "/readyz"
+      - "/healthz"
+      - "/metrics"
+      - "/api"
+      - "/api/*"
+      - "/apis"
+      - "/apis/*"
+      - "/version"
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: zabbix-read-binding
+  labels:
+    app.kubernetes.io/name: zabbix-monitoring
+subjects:
+  - kind: ServiceAccount
+    name: zabbix-service-account
+    namespace: zabbix
+roleRef:
+  kind: ClusterRole
+  name: zabbix-read-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: zabbix-service-account-token
+  namespace: zabbix
+  labels:
+    app.kubernetes.io/name: zabbix-monitoring
+  annotations:
+    kubernetes.io/service-account.name: zabbix-service-account
+type: kubernetes.io/service-account-token
+---
+# ==============================================================================
+# Kube-State-Metrics (KSM) Deployment & RBAC
+# ==============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: zabbix-kube-state-metrics
+  namespace: zabbix
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: zabbix-kube-state-metrics
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - secrets
+      - nodes
+      - pods
+      - services
+      - serviceaccounts
+      - resourcequotas
+      - replicationcontrollers
+      - limitranges
+      - persistentvolumeclaims
+      - persistentvolumes
+      - namespaces
+      - endpoints
+    verbs: ["list", "watch"]
+  - apiGroups: ["apps"]
+    resources:
+      - statefulsets
+      - daemonsets
+      - deployments
+      - replicasets
+    verbs: ["list", "watch"]
+  - apiGroups: ["batch"]
+    resources:
+      - cronjobs
+      - jobs
+    verbs: ["list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs: ["list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - networkpolicies
+      - ingresses
+    verbs: ["list", "watch"]
+  - apiGroups: ["storage.k8s.io"]
+    resources:
+      - storageclasses
+      - volumeattachments
+    verbs: ["list", "watch"]
+  - apiGroups: ["admissionregistration.k8s.io"]
+    resources:
+      - mutatingwebhookconfigurations
+      - validatingwebhookconfigurations
+    verbs: ["list", "watch"]
+  - apiGroups: ["certificates.k8s.io"]
+    resources:
+      - certificatesigningrequests
+    verbs: ["list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: zabbix-kube-state-metrics
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+subjects:
+  - kind: ServiceAccount
+    name: zabbix-kube-state-metrics
+    namespace: zabbix
+roleRef:
+  kind: ClusterRole
+  name: zabbix-kube-state-metrics
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zabbix-kube-state-metrics
+  namespace: zabbix
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+    app.kubernetes.io/component: metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kube-state-metrics
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kube-state-metrics
+    spec:
+      serviceAccountName: zabbix-kube-state-metrics
+      containers:
+        - name: kube-state-metrics
+          image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http-metrics
+              containerPort: 8080
+            - name: telemetry
+              containerPort: 8081
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8081
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: zabbix-kube-state-metrics
+  namespace: zabbix
+  labels:
+    app.kubernetes.io/name: kube-state-metrics
+spec:
+  type: ClusterIP
+  ports:
+    - name: http-metrics
+      port: 8080
+      targetPort: http-metrics
+      protocol: TCP
+    - name: telemetry
+      port: 8081
+      targetPort: telemetry
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: kube-state-metrics

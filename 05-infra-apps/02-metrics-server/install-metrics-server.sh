@@ -8,12 +8,20 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 VALUES_FILE="${SCRIPT_DIR}/metrics-server-values.yaml"
-NAMESPACE="kube-system"
-RELEASE_NAME="metrics-server"
-CHART_VERSION="3.14.0"
-HELM_CHART="metrics-server/metrics-server"
-HELM_REPO_URL="https://kubernetes-sigs.github.io/metrics-server/"
+NAMESPACE="${NAMESPACE:-kube-system}"
+RELEASE_NAME="${RELEASE_NAME:-metrics-server}"
+CHART_VERSION="${CHART_VERSION:-3.14.0}"
+HELM_CHART="${HELM_CHART:-metrics-server/metrics-server}"
+HELM_REPO_URL="${HELM_REPO_URL:-https://kubernetes-sigs.github.io/metrics-server/}"
 # ==============================================================================
 
 echo "================================================================="

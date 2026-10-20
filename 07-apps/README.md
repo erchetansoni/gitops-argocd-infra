@@ -50,12 +50,12 @@ To allow Argo CD to pull manifests from your private repository `https://github.
 ## Quickstart
 
 ### Step 1: Configure `.env`
-Copy the sample file and update your credentials:
+Configure your Git repository credentials in the project root `.env` (copied from `.env.example`):
 ```bash
-cp 07-apps/.env.example 07-apps/.env
+cp .env.example .env
 ```
 
-Ensure `.env` contains:
+Ensure `GITHUB_TOKEN` is set with your Personal Access Token (PAT):
 ```env
 REPO_URL="https://github.com/erchetansoni/gitops-argocd-apps.git"
 GITHUB_USERNAME="erchetansoni"

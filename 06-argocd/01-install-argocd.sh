@@ -8,12 +8,20 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ARGOCD_VERSION="3.5.3"
-ARGOCD_NAMESPACE="argocd"
-ARGOCD_HOST="argocd.chetan.local"
-ARGOCD_SERVER_DEPLOYMENT="argocd-server"
-ARGOCD_INITIAL_ADMIN_SECRET="argocd-initial-admin-secret"
-HTTPROUTE_FILE="${SCRIPT_DIR}/argocd-httproute.yaml"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
+ARGOCD_VERSION="${ARGOCD_VERSION:-3.5.3}"
+ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-${NAMESPACE:-argocd}}"
+ARGOCD_HOST="${ARGOCD_HOST:-argocd.${MAIN_DOMAIN:-chetan.local}}"
+ARGOCD_SERVER_DEPLOYMENT="${ARGOCD_SERVER_DEPLOYMENT:-argocd-server}"
+ARGOCD_INITIAL_ADMIN_SECRET="${ARGOCD_INITIAL_ADMIN_SECRET:-argocd-initial-admin-secret}"
+HTTPROUTE_FILE="${HTTPROUTE_FILE:-${SCRIPT_DIR}/argocd-httproute.yaml}"
 ARGOCD_CONFIGMAPS_FILE="${SCRIPT_DIR}/argocd-configmaps.yaml"
 # ==============================================================================
 
@@ -120,8 +128,13 @@ if [[ ! -f "${HTTPROUTE_FILE}" ]]; then
   exit 1
 fi
 
-HTTPROUTE_NATIVE="$(to_native_path "${HTTPROUTE_FILE}")"
-kubectl apply -n "${ARGOCD_NAMESPACE}" --server-side --force-conflicts -f "${HTTPROUTE_NATIVE}"
+if [[ "${ARGOCD_HOST}" != "argocd.chetan.local" ]]; then
+  echo "🔄 Dynamically adapting Argo CD HTTPRoute to '${ARGOCD_HOST}'..."
+  sed "s|argocd.chetan.local|${ARGOCD_HOST}|g" "${HTTPROUTE_FILE}" | kubectl apply -n "${ARGOCD_NAMESPACE}" --server-side --force-conflicts -f -
+else
+  HTTPROUTE_NATIVE="$(to_native_path "${HTTPROUTE_FILE}")"
+  kubectl apply -n "${ARGOCD_NAMESPACE}" --server-side --force-conflicts -f "${HTTPROUTE_NATIVE}"
+fi
 
 # Step 5: Verification & Auto-Validation
 echo ""
@@ -161,4 +174,6 @@ if kubectl get secret "${ARGOCD_INITIAL_ADMIN_SECRET}" -n "${ARGOCD_NAMESPACE}" 
 else
   echo "   (Initial admin secret '${ARGOCD_INITIAL_ADMIN_SECRET}' not found. It may have already been rotated.)"
 fi
+echo ""
+echo "💡 Tip: Run ./print-summary.sh anytime to view all platform credentials & URLs."
 echo "================================================================="

@@ -8,13 +8,22 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 CERT_DIR="${SCRIPT_DIR}/cert"
 TLS_GENERATOR_DIR="${CERT_DIR}/tls-generator/server"
 MANIFEST_FILE="${SCRIPT_DIR}/install-gatewayclass_and_gateway.yaml"
 
 # Target TLS Secret and Namespace
-SECRET_NAME="domain-certificate-tls-secret"
-SECRET_NAMESPACE="default"
+MAIN_DOMAIN="${MAIN_DOMAIN:-chetan.local}"
+SECRET_NAME="${DOMAIN_CERT_SECRET_NAME:-${SECRET_NAME:-domain-certificate-tls-secret}}"
+SECRET_NAMESPACE="${SECRET_NAMESPACE:-default}"
 
 # ==============================================================================
 
@@ -226,8 +235,13 @@ if [[ ! -f "${MANIFEST_FILE}" ]]; then
   exit 1
 fi
 
-MANIFEST_NATIVE="$(to_native_path "${MANIFEST_FILE}")"
-kubectl apply -f "${MANIFEST_NATIVE}"
+if [[ "${MAIN_DOMAIN}" != "chetan.local" ]]; then
+  echo "🔄 Dynamically adapting Gateway hostnames and Certificate to '${MAIN_DOMAIN}'..."
+  sed "s|chetan.local|${MAIN_DOMAIN}|g" "${MANIFEST_FILE}" | kubectl apply -f -
+else
+  MANIFEST_NATIVE="$(to_native_path "${MANIFEST_FILE}")"
+  kubectl apply -f "${MANIFEST_NATIVE}"
+fi
 
 # If cert-manager is active, wait for Certificate issuance
 if [[ "$USE_CERT_MANAGER" = true ]]; then

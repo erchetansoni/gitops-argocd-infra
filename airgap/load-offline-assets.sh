@@ -12,8 +12,16 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TAR_FILE="${SCRIPT_DIR}/airgap-images.tar"
-K3S_IMAGES_DIR="/var/lib/rancher/k3s/agent/images"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
+TAR_FILE="${AIRGAP_TAR_OUTPUT:-${TAR_FILE:-${SCRIPT_DIR}/airgap-images.tar}}"
+K3S_IMAGES_DIR="${K3S_IMAGES_DIR:-/var/lib/rancher/k3s/agent/images}"
 
 SKIP_CLEAN=false
 CLEAN_SOURCE=false
@@ -141,7 +149,15 @@ if [[ $EUID -ne 0 ]]; then
     if [[ -n "${KIND_CLUSTERS}" ]]; then
       TARGET_CLUSTER="${KIND_CLUSTER_NAME:-gitops-demo-cluster}"
       echo "💡 Local KinD environment detected. Loading into KinD cluster '${TARGET_CLUSTER}'..."
-      kind load image-archive "${TAR_FILE}" --name "${TARGET_CLUSTER}"
+      if ! kind load image-archive "${TAR_FILE}" --name "${TARGET_CLUSTER}" 2>/dev/null; then
+        echo "   ⚠️  'kind load image-archive' failed; streaming directly to KinD ctr..."
+        KIND_NODES="$(kind get nodes --name "${TARGET_CLUSTER}" 2>/dev/null || true)"
+        [[ -z "${KIND_NODES}" ]] && KIND_NODES="${TARGET_CLUSTER}-control-plane"
+        for node in ${KIND_NODES}; do
+          echo "   📥 Streaming archive to node '${node}'..."
+          cat "${TAR_FILE}" | docker exec -i "${node}" ctr --namespace=k8s.io images import --digests - >/dev/null
+        done
+      fi
       echo "✅ Images successfully loaded into KinD cluster '${TARGET_CLUSTER}'!"
       
       if [[ "${CLEAN_SOURCE}" == "true" ]]; then

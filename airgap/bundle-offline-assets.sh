@@ -5,14 +5,24 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/images.yaml" ]]; then
-  IMAGES_FILE="${SCRIPT_DIR}/images.yaml"
-elif [[ -f "${SCRIPT_DIR}/images.yml" ]]; then
-  IMAGES_FILE="${SCRIPT_DIR}/images.yml"
-else
-  IMAGES_FILE="${SCRIPT_DIR}/images.txt"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
+if [[ -z "${IMAGES_FILE:-}" ]]; then
+  if [[ -f "${SCRIPT_DIR}/images.yaml" ]]; then
+    IMAGES_FILE="${SCRIPT_DIR}/images.yaml"
+  elif [[ -f "${SCRIPT_DIR}/images.yml" ]]; then
+    IMAGES_FILE="${SCRIPT_DIR}/images.yml"
+  else
+    IMAGES_FILE="${SCRIPT_DIR}/images.txt"
+  fi
 fi
-OUTPUT_TAR="${SCRIPT_DIR}/airgap-images.tar"
+OUTPUT_TAR="${AIRGAP_TAR_OUTPUT:-${OUTPUT_TAR:-${SCRIPT_DIR}/airgap-images.tar}}"
 CHARTS_DIR="${SCRIPT_DIR}/charts"
 
 echo "================================================================="
@@ -106,13 +116,19 @@ if command -v helm &>/dev/null; then
   helm repo add traefik https://traefik.github.io/charts --force-update >/dev/null 2>&1 || true
   helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null 2>&1 || true
   helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ --force-update >/dev/null 2>&1 || true
+  helm repo add harbor https://helm.goharbor.io --force-update >/dev/null 2>&1 || true
   helm repo update >/dev/null 2>&1 || true
 
   helm pull traefik/traefik --version 41.6.0 -d "${CHARTS_DIR_NATIVE}"
   helm pull jetstack/cert-manager --version v1.21.2 -d "${CHARTS_DIR_NATIVE}"
   helm pull metrics-server/metrics-server --version 3.14.0 -d "${CHARTS_DIR_NATIVE}"
+  helm pull harbor/harbor --version 1.19.2 -d "${CHARTS_DIR_NATIVE}"
   helm repo index "${CHARTS_DIR_NATIVE}"
-  echo "✅ Helm charts saved and repository index.yaml generated."
+  # Standardize index.yaml by stripping dynamic timestamps to ensure reproducible Git diffs
+  if [[ -f "${CHARTS_DIR}/index.yaml" ]]; then
+    sed -i -E '/^[[:space:]]*(created|generated):/d' "${CHARTS_DIR}/index.yaml" 2>/dev/null || true
+  fi
+  echo "✅ Helm charts saved and repository index.yaml generated (standardized)."
 else
   echo "ℹ️ Helm not found on workstation; using pre-bundled charts if present."
 fi

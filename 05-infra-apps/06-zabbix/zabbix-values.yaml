@@ -1,0 +1,534 @@
+# ==============================================================================
+# Zabbix Monitoring Platform - Helm Values Configuration
+# ==============================================================================
+# Includes: Zabbix Server (v7.4.15 pgsql), Zabbix Web UI (v7.4.15 nginx-pgsql),
+#           Zabbix Proxy (v7.4.15 sqlite3), Zabbix SNMP Traps (v7.4.15),
+#           Zabbix Agent 2 (v7.4.15 DaemonSet), and TimescaleDB 2.17.2 (PG16)
+# ==============================================================================
+
+zabbixImageTag: "alpine-7.4.15"
+
+# ------------------------------------------------------------------------------
+# 1. Unified PostgreSQL / TimescaleDB Access Configuration
+# ------------------------------------------------------------------------------
+postgresAccess:
+  host: "zabbix-postgresql"
+  port: "5432"
+  user: "zabbix"
+  password: "Zabbix12345"
+  database: "zabbix"
+
+# ------------------------------------------------------------------------------
+# 2. TimescaleDB Time-Series Database Backend
+# ------------------------------------------------------------------------------
+postgresql:
+  enabled: true
+  image:
+    repository: timescale/timescaledb
+    tag: "2.17.2-pg16"
+    pullPolicy: IfNotPresent
+  max_connections: 150
+  persistence:
+    enabled: true
+    storageSize: 10Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# ------------------------------------------------------------------------------
+# 3. Zabbix Server (v7.4.15 with TimescaleDB & SNMP Trapper Sidecar)
+# ------------------------------------------------------------------------------
+zabbixServer:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: zabbix/zabbix-server-pgsql
+    tag: "alpine-7.4.15"
+    pullPolicy: IfNotPresent
+  zabbixServerHA:
+    enabled: false
+  haNodesAutoClean:
+    enabled: true
+    image:
+      repository: timescale/timescaledb
+      tag: "2.17.2-pg16"
+    schedule: "*/5 * * * *"
+    deleteOlderThanSeconds: 300
+  service:
+    type: ClusterIP
+    port: 10051
+  extraEnv:
+    - name: ENABLE_TIMESCALEDB
+      value: "true"
+    - name: ZBX_DBEXTENDEDSTATUS
+      value: "1"
+    - name: ZBX_STARTPOLLERS
+      value: "5"
+    - name: ZBX_STARTTRAPPERS
+      value: "5"
+    - name: ZBX_AUTOHANODENAME
+      value: "hostname"
+    - name: ZBX_AUTONODEADDRESS
+      value: "hostname"
+    - name: ZBX_TLSCAFILE
+      value: "/etc/zabbix/tls/ca.crt"
+    - name: ZBX_TLSCERTFILE
+      value: "/etc/zabbix/tls/tls.crt"
+    - name: ZBX_TLSKEYFILE
+      value: "/etc/zabbix/tls/tls.key"
+  extraVolumes:
+    - name: zabbix-server-tls
+      secret:
+        secretName: zabbix-server-tls-secret
+        defaultMode: 0444
+  extraVolumeMounts:
+    - name: zabbix-server-tls
+      mountPath: /etc/zabbix/tls
+      readOnly: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# ------------------------------------------------------------------------------
+# 4. Zabbix Web UI (Nginx + PostgreSQL v7.4.15)
+# ------------------------------------------------------------------------------
+zabbixWeb:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: zabbix/zabbix-web-nginx-pgsql
+    tag: "alpine-7.4.15"
+    pullPolicy: IfNotPresent
+  ZBX_SERVER_HOST: zabbix-zabbix-server
+  ZBX_SERVER_PORT: 10051
+  service:
+    type: ClusterIP
+    port: 80
+  extraEnv:
+    - name: ZBX_SERVER_HOST
+      value: "zabbix-zabbix-server"
+    - name: ZBX_SERVER_PORT
+      value: "10051"
+    - name: ZBX_DBEXTENDEDSTATUS
+      value: "1"
+    - name: PHP_TZ
+      value: "UTC"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+# ------------------------------------------------------------------------------
+# 5. Zabbix Proxy (SQLite3 Engine v7.4.15)
+# ------------------------------------------------------------------------------
+zabbixProxy:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: zabbix/zabbix-proxy-sqlite3
+    tag: "alpine-7.4.15"
+    pullPolicy: IfNotPresent
+  ZBX_PROXYMODE: 0 # Active proxy
+  ZBX_HOSTNAME: "IN-ZBX-PROXY-0"
+  ZBX_SERVER_HOST: "zabbix-zabbix-server;zabbix-zabbix-server-standby"
+  ZBX_SERVER_PORT: 10051
+  service:
+    type: ClusterIP
+    port: 10051
+  persistentVolume:
+    enabled: true
+    size: 2Gi
+  extraEnv:
+    - name: ZBX_STARTSNMPTRAPPER
+      value: "1"
+    - name: ZBX_STARTSNMPTRAPPERS
+      value: "1"
+    - name: ZBX_TLSCONNECT
+      value: "cert"
+    - name: ZBX_TLSACCEPT
+      value: "cert,unencrypted"
+    - name: ZBX_TLSCAFILE
+      value: "/etc/zabbix/tls/ca.crt"
+    - name: ZBX_TLSCERTFILE
+      value: "/etc/zabbix/tls/tls.crt"
+    - name: ZBX_TLSKEYFILE
+      value: "/etc/zabbix/tls/tls.key"
+  extraContainers:
+    - name: zabbix-snmptraps
+      image: "zabbix/zabbix-snmptraps:alpine-7.4.15"
+      imagePullPolicy: IfNotPresent
+      ports:
+        - name: snmptraps
+          containerPort: 1162
+          hostPort: 162
+          protocol: UDP
+        - name: zabbix-proxy
+          containerPort: 10051
+          hostPort: 10051
+          protocol: TCP
+      volumeMounts:
+        - name: snmptraps-dir
+          mountPath: /var/lib/zabbix/snmptraps
+  extraVolumes:
+    - name: snmptraps-dir
+      emptyDir: {}
+    - name: zabbix-proxy-tls
+      secret:
+        secretName: zabbix-proxy-tls-secret
+        defaultMode: 0444
+  extraVolumeMounts:
+    - name: snmptraps-dir
+      mountPath: /var/lib/zabbix/snmptraps
+    - name: zabbix-proxy-tls
+      mountPath: /etc/zabbix/tls
+      readOnly: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+
+# ------------------------------------------------------------------------------
+# 6. Zabbix Agent 2 (Kubernetes Node Monitoring DaemonSet v7.4.15)
+# ------------------------------------------------------------------------------
+zabbixAgent:
+  enabled: true
+  runAsSidecar: false
+  runAsDaemonSet: true
+  image:
+    repository: zabbix/zabbix-agent2
+    tag: "alpine-7.4.15"
+    pullPolicy: IfNotPresent
+  ZBX_SERVER_HOST: "zabbix-zabbix-server,zabbix-zabbix-server-standby,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+  ZBX_SERVER_PORT: 10051
+  ZBX_PASSIVE_ALLOW: true
+  ZBX_ACTIVE_ALLOW: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+# ------------------------------------------------------------------------------
+# 7. Additional Manifests (SNMP Traps UDP Service & Gateway API HTTPRoute)
+# ------------------------------------------------------------------------------
+extraManifests:
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: zabbix-snmptraps
+      namespace: zabbix
+      labels:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: snmptraps
+    spec:
+      type: ClusterIP
+      selector:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: proxy
+      ports:
+        - name: snmptraps-udp
+          port: 162
+          targetPort: 1162
+          protocol: UDP
+  - apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      name: zabbix-route
+      namespace: zabbix
+    spec:
+      parentRefs:
+        - name: main-gateway
+          namespace: default
+      hostnames:
+        - "zabbix.chetan.local"
+        - "zbx-srv.chetan.local"
+        - "zbx-proxy.chetan.local"
+        - "zbx-snmp.chetan.local"
+      rules:
+        - matches:
+            - path:
+                type: PathPrefix
+                value: /
+          backendRefs:
+            - name: zabbix-zabbix-web
+              port: 80
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: zabbix-zabbix-server-standby
+      namespace: zabbix
+      labels:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: server-standby
+    spec:
+      type: ClusterIP
+      selector:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: server-standby
+      ports:
+        - name: zabbix-server
+          port: 10051
+          targetPort: 10051
+          protocol: TCP
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: zabbix-zabbix-server-standby
+      namespace: zabbix
+      labels:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: server-standby
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: zabbix
+          app.kubernetes.io/component: server-standby
+      strategy:
+        type: Recreate
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: zabbix
+            app.kubernetes.io/component: server-standby
+            app.kubernetes.io/instance: zabbix
+        spec:
+          serviceAccountName: zabbix
+          containers:
+            - name: zabbix-server
+              image: zabbix/zabbix-server-pgsql:alpine-7.4.15
+              imagePullPolicy: IfNotPresent
+              ports:
+                - name: zabbix-server
+                  containerPort: 10051
+                  protocol: TCP
+                - name: zabbix-jmx
+                  containerPort: 10052
+                  protocol: TCP
+              env:
+                - name: DB_SERVER_HOST
+                  value: zabbix-postgresql
+                - name: DB_SERVER_PORT
+                  value: "5432"
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: zabbix-db-access
+                      key: user
+                      optional: true
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: zabbix-db-access
+                      key: password
+                - name: POSTGRES_DB
+                  value: zabbix
+                - name: ENABLE_TIMESCALEDB
+                  value: "true"
+                - name: ZBX_DBEXTENDEDSTATUS
+                  value: "1"
+                - name: ZBX_STARTPOLLERS
+                  value: "5"
+                - name: ZBX_STARTTRAPPERS
+                  value: "5"
+                - name: ZBX_AUTOHANODENAME
+                  value: "hostname"
+                - name: ZBX_AUTONODEADDRESS
+                  value: "hostname"
+                - name: ZBX_NODEADDRESS
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: status.podIP
+                - name: ZBX_TLSCAFILE
+                  value: "/etc/zabbix/tls/ca.crt"
+                - name: ZBX_TLSCERTFILE
+                  value: "/etc/zabbix/tls/tls.crt"
+                - name: ZBX_TLSKEYFILE
+                  value: "/etc/zabbix/tls/tls.key"
+              volumeMounts:
+                - name: zabbix-server-tls
+                  mountPath: /etc/zabbix/tls
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 1Gi
+          volumes:
+            - name: zabbix-server-tls
+              secret:
+                secretName: zabbix-server-tls-secret
+                defaultMode: 0444
+  - apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: zabbix-server-tls
+      namespace: zabbix
+    spec:
+      secretName: zabbix-server-tls-secret
+      issuerRef:
+        name: local-ca-issuer
+        kind: ClusterIssuer
+      commonName: "zbx-srv.chetan.local"
+      dnsNames:
+        - "zbx-srv.chetan.local"
+        - "zabbix-zabbix-server"
+        - "zabbix-zabbix-server-standby"
+        - "zabbix-zabbix-server.zabbix.svc.cluster.local"
+        - "zabbix-zabbix-server-standby.zabbix.svc.cluster.local"
+        - "zabbix-zabbix-server.zabbix.svc"
+        - "zabbix-zabbix-server-standby.zabbix.svc"
+        - "localhost"
+      ipAddresses:
+        - "127.0.0.1"
+      duration: 8760h # 1 year
+      renewBefore: 720h # 30 days
+      privateKey:
+        algorithm: RSA
+        size: 2048
+  - apiVersion: v1
+    kind: Service
+    metadata:
+      name: in-zbx-proxy-1
+      namespace: zabbix
+      labels:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: proxy-1
+    spec:
+      type: ClusterIP
+      selector:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: proxy-1
+      ports:
+        - name: zabbix-proxy
+          port: 10051
+          targetPort: 10051
+          protocol: TCP
+  - apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: in-zbx-proxy-1
+      namespace: zabbix
+      labels:
+        app.kubernetes.io/name: zabbix
+        app.kubernetes.io/component: proxy-1
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: zabbix
+          app.kubernetes.io/component: proxy-1
+      strategy:
+        type: Recreate
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: zabbix
+            app.kubernetes.io/component: proxy-1
+            app.kubernetes.io/instance: zabbix
+        spec:
+          serviceAccountName: zabbix
+          containers:
+            - name: zabbix-proxy
+              image: zabbix/zabbix-proxy-sqlite3:alpine-7.4.15
+              imagePullPolicy: IfNotPresent
+              ports:
+                - name: zabbix-proxy
+                  containerPort: 10051
+                  protocol: TCP
+              env:
+                - name: ZBX_PROXYMODE
+                  value: "0"
+                - name: ZBX_HOSTNAME
+                  value: "IN-ZBX-PROXY-1"
+                - name: ZBX_SERVER_HOST
+                  value: "zabbix-zabbix-server;zabbix-zabbix-server-standby"
+                - name: ZBX_SERVER_PORT
+                  value: "10051"
+                - name: ZBX_TLSCONNECT
+                  value: "cert"
+                - name: ZBX_TLSACCEPT
+                  value: "cert,unencrypted"
+                - name: ZBX_TLSCAFILE
+                  value: "/etc/zabbix/tls/ca.crt"
+                - name: ZBX_TLSCERTFILE
+                  value: "/etc/zabbix/tls/tls.crt"
+                - name: ZBX_TLSKEYFILE
+                  value: "/etc/zabbix/tls/tls.key"
+              volumeMounts:
+                - name: zabbix-proxy-tls
+                  mountPath: /etc/zabbix/tls
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  memory: 512Mi
+          volumes:
+            - name: zabbix-proxy-tls
+              secret:
+                secretName: zabbix-proxy-tls-secret
+                defaultMode: 0444
+  - apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: zabbix-proxy-tls
+      namespace: zabbix
+    spec:
+      secretName: zabbix-proxy-tls-secret
+      issuerRef:
+        name: local-ca-issuer
+        kind: ClusterIssuer
+      commonName: "IN-ZBX-PROXY"
+      dnsNames:
+        - "IN-ZBX-PROXY"
+        - "IN-ZBX-PROXY-0"
+        - "IN-ZBX-PROXY-1"
+        - "in-zbx-proxy-1"
+        - "in-zbx-proxy-1.zabbix.svc"
+        - "in-zbx-proxy-1.zabbix.svc.cluster.local"
+        - "zbx-proxy"
+        - "zbx-proxy.chetan.local"
+        - "zabbix-zabbix-proxy"
+        - "zabbix-zabbix-proxy.zabbix.svc.cluster.local"
+        - "zabbix-zabbix-proxy.zabbix.svc"
+        - "localhost"
+      ipAddresses:
+        - "127.0.0.1"
+      duration: 8760h # 1 year
+      renewBefore: 720h # 30 days
+      privateKey:
+        algorithm: RSA
+        size: 2048
+  - apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: zabbix-agent-fleet-tls
+      namespace: zabbix
+    spec:
+      secretName: zabbix-agent-fleet-tls-secret
+      issuerRef:
+        name: local-ca-issuer
+        kind: ClusterIssuer
+      commonName: "*.agents.chetan.local"
+      dnsNames:
+        - "*.agents.chetan.local"
+        - "zabbix-agent-fleet"
+      duration: 26280h # 3 years (long-lived for fleet distribution)
+      renewBefore: 720h # 30 days
+      privateKey:
+        algorithm: RSA
+        size: 2048

@@ -8,6 +8,14 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 CONFIG_FILE="${SCRIPT_DIR}/kind-cluster-config.yaml"
 # ==============================================================================
 
@@ -24,6 +32,12 @@ to_native_path() {
 if [[ ! -f "${CONFIG_FILE}" ]]; then
   echo "❌ Kind cluster config file not found at: ${CONFIG_FILE}"
   exit 1
+fi
+
+CLUSTER_NAME="${CLUSTER_NAME:-gitops-demo-cluster}"
+if kind get clusters 2>/dev/null | grep -wq "${CLUSTER_NAME}"; then
+  echo "✅ Kind cluster '${CLUSTER_NAME}' is already created and running. Skipping creation."
+  exit 0
 fi
 
 ########## 🚀 Creating Kind Local Cluster ###########################

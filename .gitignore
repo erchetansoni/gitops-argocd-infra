@@ -28,6 +28,7 @@
 *.log
 
 # Large Air-Gap image archives and chart packages (ignored in any directory at any depth)
+*.tar*
 *.tar
 *.tgz
 *.tar.gz

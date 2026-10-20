@@ -5,12 +5,22 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "${SCRIPT_DIR}/../05-infra-apps/infra-apps-root.yaml" ]]; then
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
+if [[ -f "${SCRIPT_DIR}/../05-infra-apps/platform-apps.yaml" ]]; then
+  INFRA_MANIFEST="${SCRIPT_DIR}/../05-infra-apps/platform-apps.yaml"
+elif [[ -f "${SCRIPT_DIR}/../05-infra-apps/infra-apps-root.yaml" ]]; then
   INFRA_MANIFEST="${SCRIPT_DIR}/../05-infra-apps/infra-apps-root.yaml"
 else
-  INFRA_MANIFEST="${SCRIPT_DIR}/infra-apps-root.yaml"
+  INFRA_MANIFEST="${SCRIPT_DIR}/platform-apps.yaml"
 fi
-NAMESPACE="${ARGOCD_NAMESPACE:-argocd}"
+NAMESPACE="${ARGOCD_NAMESPACE:-${NAMESPACE:-argocd}}"
 
 to_native_path() {
   local p="$1"
@@ -74,6 +84,7 @@ if [[ "${INSTALL_MODE}" == "airgap" ]]; then
     if [[ ! -f "${CHARTS_DIR}/index.yaml" ]]; then
       if command -v helm &>/dev/null; then
         helm repo index "$(to_native_path "${CHARTS_DIR}")" 2>/dev/null || true
+        sed -i -E '/^[[:space:]]*(created|generated):/d' "${CHARTS_DIR}/index.yaml" 2>/dev/null || true
       fi
     fi
 
@@ -115,5 +126,9 @@ echo "✅ Infrastructure apps registered with Argo CD!"
 echo "   - Traefik Gateway Controller (traefik-gateway-controller)"
 echo "   - Metrics Server (metrics-server)"
 echo "   - cert-manager (cert-manager)"
+echo "   - Harbor Container Registry (harbor)"
+echo "   - Forgejo Git Service (forgejo)"
+echo "   - Forgejo Actions Runner (forgejo-runner)"
+echo "   - Zabbix Monitoring Platform (zabbix)"
 echo "================================================================="
 

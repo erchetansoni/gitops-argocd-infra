@@ -8,10 +8,18 @@ export MSYS_NO_PATHCONV=1
 # CONFIGURATION VARIABLES
 # ==============================================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+for env_loader in "${SCRIPT_DIR}/load-env.sh" "${SCRIPT_DIR}/../load-env.sh" "${SCRIPT_DIR}/../../load-env.sh"; do
+  if [[ -f "${env_loader}" ]]; then
+    # shellcheck disable=SC1090
+    source "${env_loader}"
+    break
+  fi
+done
+
 VALUES_FILE="${SCRIPT_DIR}/traefik-values.yaml"
-NAMESPACE="traefik"
-RELEASE_NAME="traefik"
-GATEWAY_API_VERSION="v1.6.2"
+NAMESPACE="${TRAEFIK_NAMESPACE:-${NAMESPACE:-traefik}}"
+RELEASE_NAME="${RELEASE_NAME:-traefik}"
+GATEWAY_API_VERSION="${GATEWAY_API_VERSION:-v1.6.2}"
 
 # Gateway API CRD Sources (Online URL & Offline Local File)
 CRD_ONLINE_URL="https://github.com/kubernetes-sigs/gateway-api/releases/download/${GATEWAY_API_VERSION}/standard-install.yaml"

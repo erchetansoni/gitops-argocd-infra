@@ -10,7 +10,6 @@ entries:
         url: https://cert-manager.io/public-keys/cert-manager-keyring-2021-09-20-1020CF3C033D4F35BAE1C19E1226061C665DF13E.gpg
     apiVersion: v2
     appVersion: v1.21.2
-    created: "2026-09-29T16:48:01.8363221+05:30"
     description: A Helm chart for cert-manager
     digest: 73a56e1728edd6c99f1f31082618c3259d279a76b7ebd3d4bdc5475c2442d34a
     home: https://cert-manager.io
@@ -31,6 +30,80 @@ entries:
     urls:
     - cert-manager-v1.21.2.tgz
     version: v1.21.2
+  forgejo:
+  - apiVersion: v2
+    appVersion: 15.0.9
+    dependencies:
+    - name: common
+      repository: oci://ghcr.io/visualon/bitnamicharts
+      tags:
+      - bitnami-common
+      version: 2.41.0
+    description: Forgejo Helm chart for Kubernetes
+    digest: 33bc4123d9a59b226704fb299b7c15a0b28443781627cb99ccf835c0630db77c
+    home: https://forgejo.org/
+    icon: https://code.forgejo.org/forgejo/forgejo/raw/branch/forgejo/assets/logo.svg
+    keywords:
+    - git
+    - issue tracker
+    - code review
+    - wiki
+    - forgejo
+    - gitea
+    - gogs
+    maintainers:
+    - email: michael.kriese@visualon.de
+      name: Michael Kriese
+    - email: mail@pat-s.me
+      name: Patrick Schratz
+    name: forgejo
+    sources:
+    - https://code.forgejo.org/forgejo-helm/forgejo-helm
+    - https://codeberg.org/forgejo/forgejo
+    type: application
+    urls:
+    - forgejo-17.2.0.tgz
+    version: 17.2.0
+  forgejo-runner:
+  - apiVersion: v2
+    appVersion: 12.7.3
+    description: Deploy runner for an forgejo instance (default codeberg.org)
+    digest: 5c14f08ed045495deb95ce3b24125bdbe81e06721dd69243196cefaff43e4c11
+    icon: https://forgejo.org/favicon.png
+    maintainers:
+    - name: WrenIX
+      url: https://wrenix.eu
+    name: forgejo-runner
+    type: application
+    urls:
+    - forgejo-runner-0.7.6.tgz
+    version: 0.7.6
+  harbor:
+  - apiVersion: v1
+    appVersion: 2.15.2
+    description: An open source trusted cloud native registry that stores, signs,
+      and scans content
+    digest: 36d8eeb41b4df1aeff18c9af7709110a2fac2194b491d37957822b3359cd5e9a
+    home: https://goharbor.io
+    icon: https://raw.githubusercontent.com/goharbor/website/main/static/img/logos/harbor-icon-color.png
+    keywords:
+    - docker
+    - registry
+    - harbor
+    maintainers:
+    - email: yan-yw.wang@broadcom.com
+      name: Yan Wang
+    - email: stone.zhang@broadcom.com
+      name: Stone Zhang
+    - email: miner.yang@broadcom.com
+      name: Miner Yang
+    name: harbor
+    sources:
+    - https://github.com/goharbor/harbor
+    - https://github.com/goharbor/harbor-helm
+    urls:
+    - harbor-1.19.2.tgz
+    version: 1.19.2
   metrics-server:
   - annotations:
       artifacthub.io/changes: |
@@ -48,7 +121,6 @@ entries:
           description: "Stop rendering `annotations: null` on the cert-manager `Issuer`, which referenced an undefined `additionalAnnotations` value. This mirrors the earlier APIService fix and prevents permanent GitOps `OutOfSync`."
     apiVersion: v2
     appVersion: 0.9.0
-    created: "2026-09-29T16:48:01.8474031+05:30"
     description: Metrics Server is a scalable, efficient source of container resource
       metrics for Kubernetes built-in autoscaling pipelines.
     digest: c2ca1185c01e6e7f53dd1b7d131f0c9b3fa50e003ed068b784563a1b5a3422a1
@@ -85,7 +157,6 @@ entries:
       traefik.io/proxy-min-version: v3.6.0
     apiVersion: v2
     appVersion: v3.7.13
-    created: "2026-09-29T16:48:01.8849291+05:30"
     description: A Traefik based Kubernetes ingress controller
     digest: cd7254ea853da73bdb88edc896f079b88d43ffa0bfe699fdbf21081361eac365
     home: https://traefik.io/
@@ -109,4 +180,3 @@ entries:
     urls:
     - traefik-41.6.0.tgz
     version: 41.6.0
-generated: "2026-09-29T16:48:01.8081038+05:30"

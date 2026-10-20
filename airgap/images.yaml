@@ -77,3 +77,87 @@ images:
   - component: redis
     description: "Argo CD in-memory state and application manifest cache"
     image: public.ecr.aws/docker/library/redis:8.2.3-alpine
+
+  # ----------------------------------------------------------------------------
+  # 5. Container Registry - Harbor v2.15.2 (Step 05: 05-infra-apps/03-harbor)
+  # ----------------------------------------------------------------------------
+  - component: harbor-core
+    description: "Harbor core service (API, auth, project management, and token service)"
+    image: docker.io/goharbor/harbor-core:v2.15.2
+
+  - component: harbor-portal
+    description: "Harbor web portal frontend"
+    image: docker.io/goharbor/harbor-portal:v2.15.2
+
+  - component: harbor-jobservice
+    description: "Harbor asynchronous job and task scheduler"
+    image: docker.io/goharbor/harbor-jobservice:v2.15.2
+
+  - component: harbor-registry
+    description: "OCI / Docker distribution registry backend"
+    image: docker.io/goharbor/registry-photon:v2.15.2
+
+  - component: harbor-registryctl
+    description: "Harbor registry controller for garbage collection and health checks"
+    image: docker.io/goharbor/harbor-registryctl:v2.15.2
+
+  - component: harbor-database
+    description: "Harbor internal PostgreSQL metadata database"
+    image: docker.io/goharbor/harbor-db:v2.15.2
+
+  - component: harbor-redis
+    description: "Harbor internal Valkey/Redis cache and queue"
+    image: docker.io/goharbor/valkey-photon:v2.15.2
+
+  - component: harbor-trivy
+    description: "Harbor Trivy vulnerability scanner adapter"
+    image: docker.io/goharbor/trivy-adapter-photon:v2.15.2
+
+  # ----------------------------------------------------------------------------
+  # 6. Git Service - Forgejo v15.0.10 (Step 05: 05-infra-apps/04-forgejo)
+  # ----------------------------------------------------------------------------
+  - component: forgejo
+    description: "Forgejo Git Service server (rootless image)"
+    image: code.forgejo.org/forgejo/forgejo:15.0.10-rootless
+
+  # ----------------------------------------------------------------------------
+  # 7. CI/CD Runner - Forgejo Runner v12.7.3 (Step 05: 05-infra-apps/05-forgejo-runner)
+  # ----------------------------------------------------------------------------
+  - component: forgejo-runner
+    description: "Forgejo Actions Runner daemon"
+    image: code.forgejo.org/forgejo/runner:12.7.3
+
+  - component: forgejo-runner-dind
+    description: "Docker-in-Docker daemon sidecar for workflow container jobs"
+    image: docker.io/docker:29.3.1-dind
+
+  - component: forgejo-runner-kubectl
+    description: "Kubectl helper image for runner hook jobs"
+    image: docker.io/alpine/kubectl:1.35.3
+
+  # ----------------------------------------------------------------------------
+  # 8. Zabbix Monitoring Platform v7.4.15 (Step 05: 05-infra-apps/06-zabbix)
+  # ----------------------------------------------------------------------------
+  - component: zabbix-timescaledb
+    description: "TimescaleDB PostgreSQL 16 time-series database backend for Zabbix"
+    image: docker.io/timescale/timescaledb:2.17.2-pg16
+
+  - component: zabbix-server
+    description: "Zabbix Server daemon with PostgreSQL/TimescaleDB support"
+    image: docker.io/zabbix/zabbix-server-pgsql:alpine-7.4.15
+
+  - component: zabbix-web
+    description: "Zabbix Web Frontend with Nginx and PostgreSQL driver"
+    image: docker.io/zabbix/zabbix-web-nginx-pgsql:alpine-7.4.15
+
+  - component: zabbix-proxy
+    description: "Zabbix Proxy with SQLite3 database engine"
+    image: docker.io/zabbix/zabbix-proxy-sqlite3:alpine-7.4.15
+
+  - component: zabbix-snmptraps
+    description: "Zabbix SNMP Traps daemon sidecar receiver"
+    image: docker.io/zabbix/zabbix-snmptraps:alpine-7.4.15
+
+  - component: zabbix-agent2
+    description: "Zabbix Agent 2 monitoring daemon for Kubernetes nodes"
+    image: docker.io/zabbix/zabbix-agent2:alpine-7.4.15
