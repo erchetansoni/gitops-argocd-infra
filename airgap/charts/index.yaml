@@ -30,6 +30,54 @@ entries:
     urls:
     - cert-manager-v1.21.2.tgz
     version: v1.21.2
+  forgejo:
+  - apiVersion: v2
+    appVersion: 15.0.9
+    dependencies:
+    - name: common
+      repository: oci://ghcr.io/visualon/bitnamicharts
+      tags:
+      - bitnami-common
+      version: 2.41.0
+    description: Forgejo Helm chart for Kubernetes
+    digest: 33bc4123d9a59b226704fb299b7c15a0b28443781627cb99ccf835c0630db77c
+    home: https://forgejo.org/
+    icon: https://code.forgejo.org/forgejo/forgejo/raw/branch/forgejo/assets/logo.svg
+    keywords:
+    - git
+    - issue tracker
+    - code review
+    - wiki
+    - forgejo
+    - gitea
+    - gogs
+    maintainers:
+    - email: michael.kriese@visualon.de
+      name: Michael Kriese
+    - email: mail@pat-s.me
+      name: Patrick Schratz
+    name: forgejo
+    sources:
+    - https://code.forgejo.org/forgejo-helm/forgejo-helm
+    - https://codeberg.org/forgejo/forgejo
+    type: application
+    urls:
+    - forgejo-17.2.0.tgz
+    version: 17.2.0
+  forgejo-runner:
+  - apiVersion: v2
+    appVersion: 12.7.3
+    description: Deploy runner for an forgejo instance (default codeberg.org)
+    digest: 5c14f08ed045495deb95ce3b24125bdbe81e06721dd69243196cefaff43e4c11
+    icon: https://forgejo.org/favicon.png
+    maintainers:
+    - name: WrenIX
+      url: https://wrenix.eu
+    name: forgejo-runner
+    type: application
+    urls:
+    - forgejo-runner-0.7.6.tgz
+    version: 0.7.6
   harbor:
   - apiVersion: v1
     appVersion: 2.15.2
@@ -132,3 +180,31 @@ entries:
     urls:
     - traefik-41.6.0.tgz
     version: 41.6.0
+  zabbix:
+  - apiVersion: v2
+    appVersion: 7.0.23
+    description: Zabbix is a mature and effortless enterprise-class open source monitoring
+      solution for network monitoring and application monitoring of millions of metrics.
+    digest: 35a7bbd391aba7fe1bd03a6a0586a24fb7d0e46763c933651308af361be6fac5
+    home: https://www.zabbix.com
+    icon: https://assets.zabbix.com/img/logo/zabbix_logo_500x131.png
+    keywords:
+    - zabbix
+    - monitoring
+    - metrics
+    - kubernetes
+    - helm
+    maintainers:
+    - email: aeciopires@yahoo.com.br
+      name: Aecio Pires
+      url: https://github.com/aeciopires
+    - email: christian.anton@inqbeo.de
+      name: Christian Anton
+      url: https://inqbeo.de
+    name: zabbix
+    sources:
+    - https://github.com/zabbix-community/helm-zabbix
+    urls:
+    - zabbix-7.1.0.tgz
+    version: 7.1.0
+
