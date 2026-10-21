@@ -106,7 +106,7 @@ if [[ "${INSTALL_MODE}" == "airgap" ]]; then
   fi
 
   echo "📦 Air-Gap Mode: Dynamically configuring Argo CD Applications with internal repoURL (http://airgap-helm-repo.${NAMESPACE}.svc:8080)..."
-  sed -E 's|repoURL:\s*https?://[^[:space:]]+|repoURL: http://airgap-helm-repo.'"${NAMESPACE}"'.svc:8080|g' "${INFRA_MANIFEST}" | \
+  sed -E 's|repoURL:\s*(https?://|code\.|codeberg\.)[^[:space:]]+|repoURL: http://airgap-helm-repo.'"${NAMESPACE}"'.svc:8080|g' "${INFRA_MANIFEST}" | \
     kubectl apply -f - -n "${NAMESPACE}"
 
 else
