@@ -1,10 +1,10 @@
 # Air-Gapped 3-Node K3s Cluster Deployment Guide
 
-This guide details how to migrate and deploy this entire GitOps platform from local KinD to a fully **Air-Gapped 3-Node K3s Kubernetes Cluster** with **zero external internet access**.
+This guide details how to install and operate the entire GitOps platform in a fully **Air-Gapped 3-Node K3s Kubernetes Cluster** with **zero external internet access**.
 
 ---
 
-## 🏛️ High-Level Architecture (3-Node K3s Cluster)
+## 🏛️ Architecture Overview
 
 ```text
        ┌────────────────────────────────────────────────────────┐
@@ -22,462 +22,174 @@ This guide details how to migrate and deploy this entire GitOps platform from lo
 │(:80, :443)   │        │(:80, :443)   │        │(:80, :443)   │
 │              │        │              │        │              │
 │ cert-manager │        │ Argo CD      │        │ Metrics-Svc  │
-│ Local CA     │        │ Workloads    │        │ Workloads    │
+│ Local CA     │        │ Harbor       │        │ Forgejo Git  │
+│ Zabbix       │        │ Workloads    │        │ Workloads    │
 └──────────────┘        └──────────────┘        └──────────────┘
 ```
 
-* **Traefik Ingress**: Deployed as a `DaemonSet` on ports `80` and `443` across all nodes. Traffic sent to any of the 3 node IPs reaches the Gateway.
+* **Traefik Ingress**: Deployed as a `DaemonSet` on ports `80` and `443` across all nodes via Kubernetes Gateway API. Traffic sent to any node IP reaches the Gateway.
 * **Storage**: Uses K3s built-in `local-path` provisioner (standard on all K3s nodes).
-* **Network**: Flannel CNI (built into K3s).
-* **Runtime**: Embedded `containerd` with offline image tarball pre-loading.
+* **Network & Runtime**: Flannel CNI + embedded `containerd` with offline image tarball import.
 
 ---
 
-## 📋 Summary of Air-Gap Components
+## 📋 Platform Components & Offline Inventory
 
-| Component | Online Source | Air-Gap Offline Source |
-| :--- | :--- | :--- |
-| **K3s Binary & Images** | `get.k3s.io` | `k3s` binary + `k3s-airgap-images-amd64.tar.zst` |
-| **Container Images** | Docker Hub, Quay, GHCR, k8s.io | `airgap/airgap-images.tar` (imported into containerd) |
-| **Gateway API CRDs** | `github.com/.../standard-install.yaml` | `02-traefik-controller/k8s-gateway-api-crd-v1.6.2-install.yaml` |
-| **Traefik Helm Chart** | `https://traefik.github.io/charts` | `airgap/charts/traefik-41.6.0.tgz` |
-| **cert-manager Chart** | `https://charts.jetstack.io` | `airgap/charts/cert-manager-v1.21.2.tgz` |
-| **Metrics Server Chart**| `https://kubernetes-sigs.github.io/...` | `airgap/charts/metrics-server-3.14.0.tgz` |
-| **Harbor Registry Chart**| `https://helm.goharbor.io` | `airgap/charts/harbor-1.19.2.tgz` |
-| **Forgejo Git Chart** | `oci://code.forgejo.org/...` | `airgap/charts/forgejo-17.2.0.tgz` |
-| **Forgejo Runner Chart**| `oci://codeberg.org/...` | `airgap/charts/forgejo-runner-0.7.6.tgz` |
-| **Zabbix Helm Chart** | `https://zabbix-community.github.io/helm-zabbix` | `airgap/charts/zabbix-7.1.0.tgz` |
-| **Argo CD Manifest** | `raw.githubusercontent.com/...` | `06-argocd/argocd-install-v3.5.3.yaml` |
-| **GitOps Git Source** | `github.com/erchetansoni/...` | In-cluster Forgejo `http://forgejo-http.forgejo.svc.cluster.local:3000/...` |
-| **Platform Helm Repo** | Public chart repos (`traefik.github.io`, etc.) | In-cluster service `http://airgap-helm-repo.argocd.svc:8080` |
+All charts and images are pre-bundled in the repository:
 
----
-
-### ❓ Why `http://airgap-helm-repo.argocd.svc:8080` Instead of Harbor or Forgejo?
-
-When operating offline, Argo CD cannot resolve public Helm URLs (`traefik.github.io`, `helm.goharbor.io`). A common question is: *Why not serve the offline charts from internal Harbor or Forgejo?*
-
-1. **Avoids the Harbor Circular Dependency ("Chicken-and-Egg")**:
-   Harbor is one of the applications being deployed! If Harbor's chart is stored inside Harbor, and Harbor crashes or is restarting during an upgrade, Argo CD **could not even download the Harbor Helm chart to repair it**. `airgap-helm-repo` is completely independent.
-2. **Zero Authentication Protocol Matching**:
-   Public Helm repositories use unauthenticated HTTP `GET` requests (`index.yaml` + `*.tgz`). `airgap-helm-repo` replicates this exact behavior over internal HTTP port 8080 with **zero tokens, passwords, or certificate verifications**. Harbor requires OCI login credentials, and Forgejo requires Git/Package tokens.
-3. **Stateless & Instant Boot**:
-   `airgap-helm-repo` is a 5MB static micro-webserver backed directly by a Kubernetes Secret (`airgap-helm-charts`) populated from `airgap/charts/*.tgz`. It has **no database, no persistent volumes**, and boots in under 1 second.
-
+| Component | Port / Hostname | Chart Source | Container Image(s) |
+| :--- | :--- | :--- | :--- |
+| **Traefik Gateway Controller** | `:80`, `:443` | `airgap/charts/traefik-41.6.0.tgz` | `docker.io/traefik:v3.7.13` |
+| **Gateway API CRDs** | — | `02-traefik-controller/k8s-gateway-api-crd-v1.6.2-install.yaml` | — |
+| **cert-manager** | `local-ca-issuer` | `airgap/charts/cert-manager-v1.21.2.tgz` | `jetstack/cert-manager-controller:v1.21.2` + webhook/cainjector |
+| **Metrics Server** | In-Cluster API | `airgap/charts/metrics-server-3.14.0.tgz` | `registry.k8s.io/metrics-server/metrics-server:v0.9.0` |
+| **Harbor Registry** | `https://cr.chetan.local` | `airgap/charts/harbor-1.19.2.tgz` | `goharbor/harbor-*`, `registry-photon`, `valkey-photon`, `trivy` |
+| **Forgejo Git Service** | `https://git.chetan.local` | `airgap/charts/forgejo-17.2.0.tgz` | `code.forgejo.org/forgejo/forgejo:15.0.10-rootless` |
+| **Forgejo Actions Runner**| In-Cluster daemon | `airgap/charts/forgejo-runner-0.7.6.tgz` | `code.forgejo.org/forgejo/runner:12.7.3`, `docker:dind`, `kubectl` |
+| **Zabbix Monitoring** | `https://zabbix.chetan.local` | `airgap/charts/zabbix-7.1.0.tgz` | `zabbix/zabbix-*-pgsql:alpine-7.4.15`, `timescaledb:2.17.2-pg16` |
+| **Argo CD** | `https://argocd.chetan.local` | `06-argocd/argocd-install-v3.5.3.yaml` | `quay.io/argoproj/argocd:v3.5.3`, `dex:v2.45.1`, `redis:8.2.3` |
+| **In-Cluster Helm Repo**| `http://airgap-helm-repo.argocd.svc:8080` | `06-argocd/airgap-helm-repo.yaml` | Backed by `airgap-helm-charts` Secret (zero-latency, no network) |
 
 ---
 
-## 💡 How Offline Detection & Image Loading Work
+## 🚀 Step-by-Step Installation via SSH
 
-Understanding how the platform behaves when there is no internet connection:
+### Step 1: Transfer Assets to Node 1
 
-### 1. Does it try internet first, or offline first?
-
-**It uses Offline Mode FIRST (instant execution, zero timeout delay).**
-
-The install scripts do **not** attempt an internet connection and wait for network timeouts. Instead, they check whether the offline files exist on disk:
-
-```text
-[ Script Starts ]
-        │
-        ▼
-Is local .tgz chart or manifest on disk?
-       ├── YES ──► Installs from local file immediately (100% offline, 0s delay)
-       └── NO  ──► Falls back to online repository (helm repo add / curl)
-```
-
-Because the `.tgz` charts and `argocd-install-v3.5.3.yaml` are pre-bundled in the repo, the scripts **instantly detect the local files and run offline without ever contacting the internet**.
-
----
-
-### 2. How Container Images Work in Air-Gap (KinD vs. K3s)
-
-Applying Helm charts and manifests only creates Kubernetes *specifications* (`Deployments`, `Pods`). When Kubernetes starts a pod, the node's container runtime (`containerd`) must have the actual container image.
-
-All manifests declare **explicit version tags** (e.g., `:v3.7.13`, `:v1.21.2`, `:v0.9.0`), meaning Kubernetes uses `imagePullPolicy: IfNotPresent`. Once an image exists in the local node cache, Kubernetes **never reaches out to the network**.
-
-```text
-KinD (Docker Container on Laptop)          K3s (Bare-Metal / VMs in Air-Gap)
-┌────────────────────────────────┐        ┌────────────────────────────────┐
-│ Laptop Host                    │        │ K3s Node Host                  │
-│                                │        │                                │
-│ ┌────────────────────────────┐ │        │ ┌────────────────────────────┐ │
-│ │ KinD Container             │ │        │ │ K3s containerd runtime     │ │
-│ │ (Internal containerd cache)│ │        │ │ (/var/lib/rancher/k3s/     │ │
-│ └────────────────────────────┘ │        │ │  agent/images/)            │ │
-│                                │        │ └────────────────────────────┘ │
-└────────────────────────────────┘        └────────────────────────────────┘
-Load via:                                 Load via:
-kind load image-archive                   sudo bash airgap/load-offline-assets.sh
-airgap/airgap-images.tar                  (copies tarball to K3s images directory)
-```
-
-#### Comparison: KinD vs. K3s Offline Behavior
-
-| Action | KinD (Local Laptop with No Internet) | 3-Node K3s (Air-Gapped Cluster) |
-| :--- | :--- | :--- |
-| **How to load images** | `kind load image-archive airgap/airgap-images.tar --name gitops-demo-cluster` | `sudo bash airgap/load-offline-assets.sh` (run on all 3 nodes) |
-| **Where images go** | Inside the KinD Docker container's internal `containerd` | Inside `/var/lib/rancher/k3s/agent/images/` on each node |
-| **If images are NOT loaded** | Pods get stuck in `ImagePullBackOff` | Pods get stuck in `ImagePullBackOff` |
-| **Once images are loaded** | Pods start immediately with `Running` status 🟢 | Pods start immediately with `Running` status 🟢 |
-| **Helm charts & manifests** | Uses local `.tgz` and offline `.yaml` 🟢 | Uses local `.tgz` and offline `.yaml` 🟢 |
-
----
-
-## 🚀 Step-by-Step Migration & Deployment
-
-### Phase 1: Bundle Assets (On Connected Workstation)
-
-Run the bundler script on your internet-connected machine:
+From your machine with the repository, copy the files to **Node 1** using SCP or SFTP:
 
 ```bash
-bash airgap/bundle-offline-assets.sh
-```
+# Tar and transfer to Node 1:
+tar -czf gitops-argocd-infra.tar.gz gitops-argocd-infra/
+scp gitops-argocd-infra.tar.gz user@<NODE1_IP>:~/
 
-This automates:
-1. Pulling all 9 required platform container images (`images.yaml`).
-2. Exporting them to `airgap/airgap-images.tar`.
-3. Packaging Helm charts (`.tgz`) for Traefik, cert-manager, and Metrics Server.
-4. Downloading the complete Argo CD `v3.5.3` install manifest.
-
-Copy the entire `gitops-argocd-infra` directory (including `airgap/airgap-images.tar`) onto a USB drive or secure jump host.
-
----
-
-### Phase 2: Install 3-Node K3s Cluster (Air-Gapped)
-
-On each node, download the official K3s air-gap release assets beforehand:
-* `k3s` binary
-* `k3s-airgap-images-amd64.tar.zst`
-* `install.sh`
-
-#### 1. Setup Node 1 (Server / Control-Plane):
-```bash
-# Place K3s airgap images
-sudo mkdir -p /var/lib/rancher/k3s/agent/images/
-sudo cp k3s-airgap-images-amd64.tar.zst /var/lib/rancher/k3s/agent/images/
-
-# Install K3s server with Traefik disabled (CRITICAL!)
-sudo cp k3s /usr/local/bin/chmod +x /usr/local/bin/k3s
-INSTALL_K3S_SKIP_DOWNLOAD=true INSTALL_K3S_EXEC="server --disable=traefik" ./install.sh
-
-# Capture join token and Node 1 IP:
-K3S_TOKEN=$(sudo cat /var/lib/rancher/k3s/server/node-token)
-NODE1_IP="192.168.1.10" # Replace with your Node 1 IP
-```
-
-> [!IMPORTANT]
-> The `--disable=traefik` flag is **mandatory**. K3s bundles legacy Traefik by default; disabling it prevents port `80`/`443` collisions with our Gateway API Traefik v3.
-
-#### 2. Join Node 2 & Node 3 (Agents / Workers):
-On each worker node:
-```bash
-sudo mkdir -p /var/lib/rancher/k3s/agent/images/
-sudo cp k3s-airgap-images-amd64.tar.zst /var/lib/rancher/k3s/agent/images/
-sudo cp k3s /usr/local/bin/ && sudo chmod +x /usr/local/bin/k3s
-
-INSTALL_K3S_SKIP_DOWNLOAD=true \
-K3S_URL="https://${NODE1_IP}:6443" \
-K3S_TOKEN="${K3S_TOKEN}" \
-./install.sh
-```
-
-#### 3. Verify the 3-Node Cluster:
-On Node 1:
-```bash
-sudo kubectl get nodes
-# Expected output: 3 nodes in 'Ready' status
+# SSH into Node 1:
+ssh user@<NODE1_IP>
+tar -xzf gitops-argocd-infra.tar.gz
+cd gitops-argocd-infra
 ```
 
 ---
 
-### Phase 3: Load Platform Container Images on All 3 Nodes
+### Step 2: Ensure K3s is Running with Traefik Disabled (CRITICAL)
 
-Run this command **on Node 1, Node 2, and Node 3**:
+K3s comes with a built-in legacy Traefik ingress by default. You **must** disable it so our Traefik v3 Gateway Controller can bind to host ports `80` and `443`.
 
-```bash
-# Standard run (Cleans stale images/tarballs on node, then loads fresh images):
-sudo bash airgap/load-offline-assets.sh
+* **If installing K3s fresh**:
+  ```bash
+  # Node 1 (Server / Control-Plane):
+  INSTALL_K3S_SKIP_DOWNLOAD=true INSTALL_K3S_EXEC="server --disable=traefik" ./install.sh
 
-# Clean, load images, and delete source tarball afterwards to reclaim disk:
-sudo bash airgap/load-offline-assets.sh --clean-source
+  # Nodes 2 & 3 (Agents / Workers):
+  INSTALL_K3S_SKIP_DOWNLOAD=true K3S_URL="https://<NODE1_IP>:6443" K3S_TOKEN="<TOKEN>" ./install.sh
+  ```
 
-# Skip the cleanup phase if you only want to load:
-sudo bash airgap/load-offline-assets.sh --skip-clean
-```
-
-#### What this script does:
-1. **Pre-Load Cleanup**: Cleans any existing or stale image archives (`*.tar`, `*.tgz`, `*.tar.gz`, `*.tar.zst`) in `/var/lib/rancher/k3s/agent/images/` and prunes dangling container images (`k3s crictl rmi --prune` / `docker image prune`) to prevent disk bloat.
-2. **Image Loading**: Copies the fresh image archive into `/var/lib/rancher/k3s/agent/images/` and imports all platform images directly into K3s containerd (`k8s.io` namespace).
-3. **Verification**: Verifies that required platform images (Traefik, cert-manager, Metrics Server, Argo CD, Dex, Redis) are present in containerd.
-4. **Post-Load Cleanup (Optional)**: If `--clean-source` is passed, deletes the source `airgap-images.tar` after import to free up space on smaller nodes.
+* **If K3s is already installed**:
+  Check if Traefik is running:
+  ```bash
+  kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik
+  ```
+  If found, remove the packaged manifest and restart K3s:
+  ```bash
+  sudo rm -f /var/lib/rancher/k3s/server/manifests/traefik.yaml
+  # Add '--disable=traefik' to /etc/systemd/system/k3s.service ExecStart if needed, then:
+  sudo systemctl daemon-reload && sudo systemctl restart k3s
+  ```
 
 ---
 
-### Phase 4: Configure Kubeconfig & Deploy Platform
+### Step 3: Load Container Images on ALL 3 Nodes
 
-On Node 1 (or workstation with admin kubeconfig):
+Because Kubernetes schedules pods across all 3 nodes, every node needs the container images in its local containerd storage.
+
+1. **On Node 1**:
+   ```bash
+   sudo bash airgap/load-offline-assets.sh
+   ```
+
+2. **On Node 2 & Node 3**:
+   Copy the tarball from Node 1 to Node 2 and Node 3:
+   ```bash
+   # From Node 1:
+   scp airgap/airgap-images.tar user@<NODE2_IP>:/tmp/
+   scp airgap/airgap-images.tar user@<NODE3_IP>:/tmp/
+
+   # SSH to Node 2 & Node 3 and import into K3s containerd:
+   ssh user@<NODE2_IP> "sudo k3s ctr images import /tmp/airgap-images.tar && rm -f /tmp/airgap-images.tar"
+   ssh user@<NODE3_IP> "sudo k3s ctr images import /tmp/airgap-images.tar && rm -f /tmp/airgap-images.tar"
+   ```
+
+---
+
+### Step 4: Configure Local DNS Resolution on Node 1
+
+During setup, helper scripts (`sync-repo-to-forgejo.sh`, validation checks) call internal domain endpoints like `https://git.chetan.local`. Add them to `/etc/hosts` on **Node 1**:
 
 ```bash
-# 1. Point to K3s cluster context:
+sudo bash -c 'cat <<EOF >> /etc/hosts
+127.0.0.1 argocd.chetan.local git.chetan.local cr.chetan.local zabbix.chetan.local
+EOF'
+```
+
+---
+
+### Step 5: Run Platform Orchestrator on Node 1
+
+Run the dedicated K3s platform installation script:
+
+```bash
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
-
-# 2. Run the platform deployment sequence:
-./02-traefik-controller/install-traefik-gateway-controller.sh
-./03-cert-manager/install-cert-manager.sh
-./04-traefik-gateway/install-traefik-gatewayclass.sh
-./05-infra-apps/02-metrics-server/install-metrics-server.sh
-./06-argocd/01-install-argocd.sh
-./06-argocd/02-adopt-infra-apps.sh
+chmod +x install-k3s-platform.sh
+./install-k3s-platform.sh
 ```
 
-Each script automatically detects the local `.tgz` Helm charts and local manifests, installing completely offline!
+#### What `install-k3s-platform.sh` executes automatically:
+1. Verifies K3s cluster nodes and Kubeconfig.
+2. Applies Gateway API CRDs (`v1.6.2`) and deploys Traefik v3 Gateway Controller (`DaemonSet` on ports 80/443).
+3. Installs `cert-manager` and issues the self-signed local Root CA & Gateway certificate (`*.chetan.local`).
+4. Deploys Traefik Gateway & HTTPS Listener.
+5. Deploys Kubernetes Metrics Server (CPU/Memory metrics for `kubectl top`).
+6. Deploys Harbor Private OCI Registry (`cr.chetan.local`).
+7. Deploys Forgejo Git Service (`git.chetan.local`) and initializes Git repository.
+8. Deploys Forgejo Actions Runner (CI/CD daemon).
+9. Deploys Zabbix Monitoring Stack (`zabbix.chetan.local`).
+10. Installs Argo CD (`argocd.chetan.local`).
+11. Starts the in-cluster `airgap-helm-repo` static chart service (`http://airgap-helm-repo.argocd.svc:8080`) and adopts all infra apps into Argo CD.
+12. Registers Forgejo internal Git repository in Argo CD.
+13. Displays complete access URLs and default credentials.
 
 ---
 
-### Phase 5: Workload Repository Setup (Internal Git Server)
+## 🌐 External Access from LAN Clients
 
-In an air-gapped environment, Argo CD cannot clone from `github.com`.
+To access the platform web consoles from your laptop/workstation on the same LAN:
 
-1. **Host Workload Git Repository**:
-   Mirror `gitops-argocd-apps` to your internal Git server (e.g. self-hosted GitLab, Gitea, or Bitbucket Server on your LAN):
-   ```text
-   http://gitea.local:3000/devops/gitops-argocd-apps.git
-   ```
+Add the following to your workstation's hosts file (`/etc/hosts` or `C:\Windows\System32\drivers\etc\hosts`), pointing to **any** of the 3 K3s node IPs (or a VIP / DNS server):
 
-2. **Update [.env](file:///c:/Projects/My_Projects/gitops-argocd-infra/.env)** at repository root:
-   ```env
-   REPO_URL="http://gitea.local:3000/devops/gitops-argocd-apps.git"
-   GITHUB_USERNAME="your-git-user"
-   GITHUB_TOKEN="your-git-token-or-password"
-   REPO_SECRET_NAME="repo-creds-secret"
-   ARGOCD_NAMESPACE="argocd"
-   ARGOCD_HOST="argocd.chetan.local"
-   ```
+```text
+192.168.1.10 argocd.chetan.local git.chetan.local cr.chetan.local zabbix.chetan.local
+```
 
-3. **Deploy Workload Apps**:
-   ```bash
-   bash 07-apps/01-install-repo-creds-secret.sh
-   bash 07-apps/02-install-root-app.sh
-   ```
+### Access URLs:
+* **Argo CD**: `https://argocd.chetan.local` (Username: `admin`)
+* **Forgejo Git**: `https://git.chetan.local` (Username: `forgejo_admin`)
+* **Harbor Registry**: `https://cr.chetan.local` (Username: `admin`)
+* **Zabbix**: `https://zabbix.chetan.local` (Username: `Admin`)
 
 ---
 
-## 🌐 LAN Ingress & DNS for 3 Nodes
-
-Because Traefik is deployed as a `DaemonSet`, every node listens on port `80` and `443`.
-
-To access the cluster from client machines on your LAN:
-
-1. **Option A: Internal DNS / Router (Recommended)**
-   Add DNS records in your local router/DNS server (pfSense, Pi-hole, AdGuard):
-   ```text
-   argocd.chetan.local   -> 192.168.1.10 (Node 1)
-   app1.chetan.local     -> 192.168.1.11 (Node 2)
-   app1.dev.chetan.local -> 192.168.1.12 (Node 3)
-   ```
-   *(Or round-robin across all 3 IPs).*
-
-2. **Option B: Workstation `/etc/hosts` or `C:\Windows\System32\drivers\etc\hosts`**
-   ```text
-   192.168.1.10 argocd.chetan.local app1.chetan.local app1.dev.chetan.local
-   ```
-
-3. **Option C: High Availability with kube-vip**
-   Deploy `kube-vip` to provide a single virtual IP (VIP, e.g. `192.168.1.200`) shared across all 3 nodes with automated failover.
-
----
-
-## 🔍 Air-Gap Verification
+## 🔍 Verification Commands
 
 ```bash
-# 1. Verify Traefik DaemonSet is running on all 3 nodes:
-kubectl get daemonset -n traefik -o wide
+# 1. Verify all 3 nodes are Ready:
+kubectl get nodes -o wide
 
-# 2. Verify cert-manager and ClusterIssuer:
-kubectl get pods -n cert-manager
-kubectl get clusterissuer local-ca-issuer
+# 2. Verify Traefik DaemonSet is running on all 3 nodes:
+kubectl get daemonset -n traefik
 
-# 3. Verify Gateway and Certificate:
-kubectl get gateway -n default
-kubectl get certificate -n default
+# 3. Verify all pods across all namespaces are Running:
+kubectl get pods -A
 
-# 4. Verify Metrics Server across 3 nodes:
-kubectl top nodes
-kubectl top pods -A
-
-# 5. Access Argo CD:
-curl -k https://argocd.chetan.local/
+# 4. Check Argo CD applications sync status:
+kubectl get applications -n argocd
 ```
-
----
-
-## 🧹 Cleaning Offline Assets & Large Image Archives
-
-When you need to reclaim disk space by deleting local container image tarballs (`*.tar`, `*.tgz`, `*.tar.gz`, `*.tar.zst`):
-
-```bash
-# 1. Preview matching files and space to reclaim without deleting anything:
-./clean-images.sh --dry-run
-# Or in PowerShell:
-.\clean-images.ps1 -DryRun
-
-# 2. Interactively delete archives across the repository:
-./clean-images.sh
-
-# 3. Clean only the airgap directory:
-./clean-images.sh ./airgap
-# Or use the shortcut:
-./airgap/clean-offline-assets.sh
-```
-
----
-
-## 🔄 Day-2 Lifecycle Operations: Adding Apps & Disconnecting Internet
-
-### 1. Adding a New Platform/Infra App in Online Mode
-
-Adding a new platform app (e.g. Prometheus, Vault, Loki) when connected to the internet is straightforward:
-
-1. **Add to [05-infra-apps/platform-apps.yaml](../05-infra-apps/platform-apps.yaml)**:
-   Append a new `Application` block under `items:`:
-   ```yaml
-   - apiVersion: argoproj.io/v1alpha1
-     kind: Application
-     metadata:
-       name: prometheus
-       namespace: argocd
-       annotations:
-         argocd.argoproj.io/sync-wave: "2"
-     spec:
-       project: default
-       source:
-         repoURL: https://prometheus-community.github.io/helm-charts
-         chart: kube-prometheus-stack
-         targetRevision: 69.3.0
-         helm:
-           valuesObject:
-             # Custom Helm values
-       destination:
-         server: https://kubernetes.default.svc
-         namespace: monitoring
-       syncPolicy:
-         automated:
-           prune: false
-           selfHeal: true
-         syncOptions:
-           - CreateNamespace=true
-           - ServerSideApply=true
-   ```
-2. **Commit and Push**:
-   ```bash
-   git add 05-infra-apps/platform-apps.yaml
-   git commit -m "feat(infra): add prometheus monitoring stack"
-   git push forgejo main
-   ```
-3. **Argo CD reconciles automatically**: The root `infra-apps` Application detects the new child application in Forgejo Git and deploys Prometheus into Kubernetes.
-
----
-
-### 2. Adding a New Platform/Infra App in Air-Gap Mode
-
-In a disconnected environment, Argo CD cannot download charts from the internet, and Kubernetes cannot pull images from Docker Hub. You must package the assets on an internet-connected workstation first:
-
-#### Step A: On the Connected Machine (Asset Preparation)
-1. **Download the Helm Chart package**:
-   ```bash
-   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-   helm pull prometheus-community/kube-prometheus-stack --version 69.3.0 -d airgap/charts/
-   ```
-2. **Re-generate the local chart repository index**:
-   ```bash
-   helm repo index airgap/charts/
-   ```
-3. **Identify & Export Container Images**:
-   Render the chart templates to discover all required images:
-   ```bash
-   helm template airgap/charts/kube-prometheus-stack-69.3.0.tgz | grep -E 'image:\s*"?([^"[:space:]]+)'
-   ```
-   Add these image strings to `airgap/images.yaml`, pull them, and export to tarball:
-   ```bash
-   docker pull prom/prometheus:v3.2.0
-   docker save prom/prometheus:v3.2.0 -o new-app-images.tar
-   ```
-
-#### Step B: In the Air-Gap Environment (Import & Deploy)
-1. **Load Images into Kubernetes Node containerd** (or push to in-cluster Harbor `cr.chetan.local`):
-   ```bash
-   # KinD:
-   kind load image-archive new-app-images.tar --name gitops-demo-cluster
-   # Or K3s:
-   sudo k3s ctr images import new-app-images.tar
-   ```
-2. **Update the in-cluster Chart Secret**:
-   Re-apply the `airgap-helm-charts` Secret with the newly added `.tgz` file:
-   ```bash
-   kubectl create secret generic airgap-helm-charts \
-     --from-file=airgap/charts/ \
-     -n argocd --dry-run=client -o yaml | kubectl apply -f -
-   ```
-3. **Declare the Application with Internal `repoURL`**:
-   In [05-infra-apps/platform-apps.yaml](../05-infra-apps/platform-apps.yaml), specify the internal chart repo:
-   ```yaml
-   source:
-     repoURL: http://airgap-helm-repo.argocd.svc:8080   # <-- Internal offline server
-     chart: kube-prometheus-stack
-     targetRevision: 69.3.0
-   ```
-4. **Push to Forgejo**:
-   ```bash
-   git add 05-infra-apps/platform-apps.yaml
-   git commit -m "feat(infra): add prometheus in airgap mode"
-   git push forgejo main
-   ```
-
----
-
-### 3. What if You Bootstrap with Internet Mode, but LATER Disconnect Internet?
-
-This is a common enterprise pattern: **provisioning a cluster in a staging lab with internet access, then shipping it to a disconnected customer site or air-gapped production**.
-
-#### What keeps working automatically with ZERO changes:
-1. **All Active Pods**: Running containers keep running without interruption.
-2. **Pod Restarts / Node Reboots**: Because all manifests declare explicit version tags (e.g. `:v3.7.13`), containerd caches them locally with `imagePullPolicy: IfNotPresent`. Node reboots will restart pods cleanly without network access.
-3. **In-Cluster GitOps**: Developers push to Forgejo (`git push forgejo main`), and Argo CD polls `http://forgejo-http.forgejo.svc.cluster.local:3000` 100% internally.
-
-#### The ONE component that needs transition:
-* In online mode, [platform-apps.yaml](../05-infra-apps/platform-apps.yaml) was committed with **public internet URLs** (`https://traefik.github.io/charts`, `https://helm.goharbor.io`).
-* When the internet is disconnected, Argo CD's periodic 3-minute poll will attempt to check those public URLs for chart updates.
-* It will fail with `ComparisonError: dial tcp ... i/o timeout` (though existing running pods remain untouched).
-
-#### How to "Cut the Cord" (Seamless Transition to Air-Gap):
-To decouple Argo CD from the internet cleanly:
-
-1. **Deploy the in-cluster chart server**:
-   ```bash
-   # Create the chart secret from local airgap/charts/
-   kubectl create secret generic airgap-helm-charts \
-     --from-file=airgap/charts/ \
-     -n argocd --dry-run=client -o yaml | kubectl apply -f -
-
-   # Start the chart web server
-   kubectl apply -f 06-argocd/airgap-helm-repo.yaml -n argocd
-   ```
-2. **Redirect `platform-apps.yaml` to the internal chart server**:
-   In `05-infra-apps/platform-apps.yaml`, change all public `repoURL:` fields to:
-   ```yaml
-   repoURL: http://airgap-helm-repo.argocd.svc:8080
-   ```
-3. **Commit and push to Forgejo**:
-   ```bash
-   git add 05-infra-apps/platform-apps.yaml
-   git commit -m "chore(airgap): switch helm repoURL to in-cluster airgap chart server"
-   git push forgejo main
-   ```
-4. **Trigger Argo CD hard refresh**:
-   ```bash
-   kubectl annotate application infra-apps -n argocd argocd.argoproj.io/refresh=hard --overwrite
-   ```
-Argo CD immediately stops contacting the internet and fetches all charts from `http://airgap-helm-repo.argocd.svc:8080`. The cluster is now permanently 100% autonomous.
-
-
