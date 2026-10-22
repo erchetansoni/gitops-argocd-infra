@@ -106,6 +106,8 @@ spec:
             requests:
               cpu: 100m
               memory: 128Mi
+        zabbixWebService:
+          enabled: false
         zabbixProxy:
           enabled: true
           replicaCount: 1

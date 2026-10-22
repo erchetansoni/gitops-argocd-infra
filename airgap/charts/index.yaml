@@ -180,3 +180,30 @@ entries:
     urls:
     - traefik-41.6.0.tgz
     version: 41.6.0
+  zabbix:
+  - apiVersion: v2
+    appVersion: 7.0.23
+    description: Zabbix is a mature and effortless enterprise-class open source monitoring
+      solution for network monitoring and application monitoring of millions of metrics.
+    digest: 35a7bbd391aba7fe1bd03a6a0586a24fb7d0e46763c933651308af361be6fac5
+    home: https://www.zabbix.com
+    icon: https://assets.zabbix.com/img/logo/zabbix_logo_500x131.png
+    keywords:
+    - zabbix
+    - monitoring
+    - metrics
+    - kubernetes
+    - helm
+    maintainers:
+    - email: aeciopires@yahoo.com.br
+      name: Aecio Pires
+      url: https://github.com/aeciopires
+    - email: christian.anton@inqbeo.de
+      name: Christian Anton
+      url: https://inqbeo.de
+    name: zabbix
+    sources:
+    - https://github.com/zabbix-community/helm-zabbix
+    urls:
+    - zabbix-7.1.0.tgz
+    version: 7.1.0
